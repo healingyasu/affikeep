@@ -85,16 +85,67 @@ class AffiKeep_Settings {
 	}
 
 	/**
-	 * AmazonリンクURLをもしも経由に変換する。
-	 * もしもIDが設定されていない場合は元のURLをそのまま返す。
+	 * 商品URLを「実際に表示するアフィリエイトリンク」に変換する。
+	 *
+	 * 入力した欄によって方式が自動的に決まる：
+	 *   1. 直接アフィリエイト情報が入っていれば直接リンク
+	 *   2. なければ もしも経由
+	 *   3. それも無ければ 素のURL
+	 *
+	 * Amazonは直接リンク推奨（PA-API審査に必要な購買実績がもしも経由では貯まらないため）。
 	 */
-	public static function convert_to_moshimo( string $url, string $mall ): string {
+	public static function affiliate_url( string $url, string $mall ): string {
+		if ( empty( $url ) ) {
+			return $url;
+		}
+
+		switch ( $mall ) {
+			case 'amazon':
+				// 直接：トラッキングIDを tag= に付与
+				$tag = self::get( 'amazon_tracking_id' );
+				if ( $tag ) {
+					return add_query_arg( 'tag', $tag, $url );
+				}
+				if ( self::get( 'moshimo_aid' ) ) {
+					return self::moshimo_wrap( $url, 'amazon' );
+				}
+				return $url;
+
+			case 'rakuten':
+				// 直接：楽天検索で取得したURLは既にアフィリエイトIDが入っているのでそのまま使う
+				if ( self::get( 'rakuten_affiliate_id' ) ) {
+					return $url;
+				}
+				if ( self::get( 'moshimo_aid' ) ) {
+					return self::moshimo_wrap( $url, 'rakuten' );
+				}
+				return $url;
+
+			case 'yahoo':
+				// 直接：LinkSwitchはサイト全体のJSが自動変換するので素のURLを出力
+				if ( self::get( 'yahoo_linkswitch' ) ) {
+					return $url;
+				}
+				if ( self::get( 'moshimo_aid' ) ) {
+					return self::moshimo_wrap( $url, 'yahoo' );
+				}
+				return $url;
+		}
+
+		return $url;
+	}
+
+	/**
+	 * URLをもしも経由リンクに変換する（内部用）。
+	 * p_id・pc_id・pl_id はもしもが各モールに割り当てた値。
+	 * ※pc_id/pl_idは登録サイトにより異なる場合があるため、もしも利用者は公開前にボタン動作を確認すること。
+	 */
+	private static function moshimo_wrap( string $url, string $mall ): string {
 		$aid = self::get( 'moshimo_aid' );
 		if ( empty( $aid ) ) {
 			return $url;
 		}
 
-		// p_id・pc_id・pl_id はもしもが各モールに割り当てた固定値
 		switch ( $mall ) {
 			case 'amazon':
 				return 'https://af.moshimo.com/af/c/click?a_id=' . urlencode( $aid )

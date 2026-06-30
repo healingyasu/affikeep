@@ -3,7 +3,7 @@
  * Plugin Name: AffiKeep
  * Plugin URI:  https://hlc-zuigen.xyz
  * Description: アフィリエイト収益管理コックピット。リンク切れチェック・記事別クリック計測・商品管理を一画面で。
- * Version:     0.2.2
+ * Version:     0.3.0
  * Author:      Yasuhiro Ueda
  * Author URI:  https://yasuhiro.me
  * Text Domain: affikeep
@@ -16,8 +16,8 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'AFFIKEEP_VERSION', '0.2.2' );
-define( 'AFFIKEEP_BUILD',   '2026-06-30 17:30 (Amazon誤検知修正)' );
+define( 'AFFIKEEP_VERSION', '0.3.0' );
+define( 'AFFIKEEP_BUILD',   '2026-06-30 18:00 (直接アフィリエイト優先・運用説明追加)' );
 define( 'AFFIKEEP_DIR',     plugin_dir_path( __FILE__ ) );
 define( 'AFFIKEEP_URL',     plugin_dir_url( __FILE__ ) );
 define( 'AFFIKEEP_SLUG',    'affikeep' );

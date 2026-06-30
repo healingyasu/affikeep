@@ -14,12 +14,10 @@ $status      = get_post_meta( $post->ID, '_affikeep_link_status', true ) ?: 'unk
 
 $s = AffiKeep_Settings::get();
 
-// もしもID が設定されていればURLを変換
-if ( ! empty( $s['moshimo_aid'] ) ) {
-	if ( $amazon_url )  $amazon_url  = AffiKeep_Settings::convert_to_moshimo( $amazon_url,  'amazon' );
-	if ( $rakuten_url ) $rakuten_url = AffiKeep_Settings::convert_to_moshimo( $rakuten_url, 'rakuten' );
-	if ( $yahoo_url )   $yahoo_url   = AffiKeep_Settings::convert_to_moshimo( $yahoo_url,   'yahoo' );
-}
+// 入力したアフィリエイト情報に応じてURLを変換（直接優先・もしもフォールバック・素のURL）
+if ( $amazon_url )  $amazon_url  = AffiKeep_Settings::affiliate_url( $amazon_url,  'amazon' );
+if ( $rakuten_url ) $rakuten_url = AffiKeep_Settings::affiliate_url( $rakuten_url, 'rakuten' );
+if ( $yahoo_url )   $yahoo_url   = AffiKeep_Settings::affiliate_url( $yahoo_url,   'yahoo' );
 
 $btn_amazon  = esc_html( $s['button_text_amazon']  ?: 'Amazonで見る' );
 $btn_rakuten = esc_html( $s['button_text_rakuten'] ?: '楽天で見る' );

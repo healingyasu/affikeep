@@ -272,6 +272,21 @@ class AffiKeep_Admin {
 
 				<?php $s = AffiKeep_Settings::get(); ?>
 
+				<div class="notice notice-info inline" style="padding:14px 18px;margin:0 0 20px;">
+					<h3 style="margin:0 0 8px;">運用の基本：入力した欄で、リンクの種類が決まります</h3>
+					<ul style="margin:0 0 10px;list-style:disc;padding-left:20px;line-height:1.7;">
+						<li><strong>Amazon・楽天・Yahoo!に直接登録している人</strong> → 各モールのID欄に入力。<u>直接リンク</u>で出力されます。</li>
+						<li><strong>もしもアフィリエイトを使う人</strong> → もしもの <code>a_id</code> だけ入力。全モールが<u>もしも経由</u>になります。</li>
+						<li>直接IDともしもIDの両方を入れた場合 → そのモールは<strong>直接が優先</strong>されます。</li>
+					</ul>
+					<p style="margin:0;padding:10px 12px;background:#fff8e5;border-left:4px solid #dba617;">
+						<strong>Amazonは直接リンクを強く推奨します。</strong>
+						Amazonの商品検索API（PA-API）は一定期間に売上実績がないと使えません。
+						もしも経由だとAmazonアソシエイトの実績にならず、APIをいつまでも有効化できません。
+						まず直接リンクで購買実績を作ることをおすすめします。
+					</p>
+				</div>
+
 				<h2 class="affikeep-section-title">楽天 Web API</h2>
 				<p class="description" style="margin-bottom:12px;">
 					アプリID・アクセスキー・アプリケーションURLの3つが必要です（2026年5月以降）。<br>
@@ -384,7 +399,11 @@ class AffiKeep_Admin {
 								value="<?php echo esc_attr( $s['moshimo_aid'] ); ?>"
 								class="regular-text"
 								placeholder="例: 1234567">
-							<p class="description">入力するとAmazon・楽天・Yahoo!のリンクが自動的にもしも経由に変換されます。もしもを使わない場合は空欄のままでOKです。</p>
+							<p class="description">
+								入力するとAmazon・楽天・Yahoo!のリンクがもしも経由に変換されます。もしもを使わない場合は空欄のままでOKです。<br>
+								上の各モールに直接IDを入れている場合は、そのモールは直接リンクが優先されます（もしもは使われません）。<br>
+								<strong>※もしも経由リンクは、公開前に一度ボタンを押して正しく飛ぶか確認してください。</strong>
+							</p>
 						</td>
 					</tr>
 				</table>
