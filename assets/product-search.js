@@ -3,6 +3,7 @@ document.addEventListener('DOMContentLoaded', function () {
 	var searchInput   = document.getElementById('ak-search-input');
 	var searchBtn     = document.getElementById('ak-search-btn');
 	var searchResults = document.getElementById('ak-search-results');
+	var affikeepItems = [];
 
 	if ( ! searchInput || ! searchBtn ) return;
 
@@ -35,8 +36,9 @@ document.addEventListener('DOMContentLoaded', function () {
 			}
 
 			var html = '<ul class="ak-result-list">';
-			data.items.forEach( function (item) {
-				html += '<li class="ak-result-item" data-item=\'' + JSON.stringify(item).replace(/'/g, '&#39;') + '\'>';
+			data.items.forEach( function (item, idx) {
+				affikeepItems[idx] = item;
+				html += '<li class="ak-result-item" data-idx="' + idx + '">';
 				if ( item.image_url ) {
 					html += '<img src="' + item.image_url + '" alt="" class="ak-result-img">';
 				}
@@ -53,7 +55,8 @@ document.addEventListener('DOMContentLoaded', function () {
 			// 選択ボタン
 			document.querySelectorAll('.ak-select-btn').forEach( function (btn) {
 				btn.addEventListener('click', function () {
-					var item = JSON.parse( this.closest('.ak-result-item').dataset.item );
+					var idx  = parseInt( this.closest('.ak-result-item').dataset.idx, 10 );
+					var item = affikeepItems[idx];
 					fillFields( item );
 					searchResults.innerHTML = '<p class="ak-search-selected">✅ 選択しました：' + item.title + '</p>';
 				}.bind(btn));
