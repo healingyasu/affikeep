@@ -124,10 +124,27 @@ class AffiKeep_Link_Checker {
 	}
 
 	/**
+	 * 楽天アフィリエイトURLから実際の商品URLを取り出す。
+	 * hb.afl.rakuten.co.jp 経由URLはサーバーから叩くと「リンク先が無効」になるため。
+	 */
+	private static function resolve_rakuten_url( string $url ): string {
+		$host = (string) parse_url( $url, PHP_URL_HOST );
+		if ( strpos( $host, 'afl.rakuten.co.jp' ) === false ) {
+			return $url;
+		}
+		parse_str( (string) parse_url( $url, PHP_URL_QUERY ), $params );
+		return ! empty( $params['pc'] ) ? $params['pc'] : $url;
+	}
+
+	/**
 	 * 単一URLの生死判定。
 	 * @return string ok|dead|unknown
 	 */
 	public static function check_url( string $url, string $mall ): string {
+		if ( $mall === 'rakuten' ) {
+			$url = self::resolve_rakuten_url( $url );
+		}
+
 		$args = [
 			'timeout'     => 12,
 			'redirection' => 5,
