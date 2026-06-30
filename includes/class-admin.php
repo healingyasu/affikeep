@@ -235,22 +235,22 @@ class AffiKeep_Admin {
 				echo '<p>リンク切れ・要確認の商品はありません。</p>';
 			} else {
 				echo '<table class="widefat striped"><thead><tr>';
-				echo '<th>商品名</th><th style="width:100px;">状態</th><th style="width:160px;">最終チェック</th><th style="width:80px;">編集</th>';
+				echo '<th>商品名</th><th style="width:80px;">楽天</th><th style="width:80px;">Yahoo</th><th style="width:160px;">最終チェック</th><th style="width:80px;">編集</th>';
 				echo '</tr></thead><tbody>';
 
 				while ( $problem->have_posts() ) {
 					$problem->the_post();
-					$id     = get_the_ID();
-					$status = get_post_meta( $id, '_affikeep_link_status', true ) ?: 'unknown';
-					$last   = get_post_meta( $id, '_affikeep_last_checked', true );
-
-					$badge = $status === 'dead'
-						? '<span style="background:#d63638;color:#fff;padding:2px 8px;border-radius:3px;font-size:12px;font-weight:600;">リンク切れ</span>'
-						: '<span style="background:#72777c;color:#fff;padding:2px 8px;border-radius:3px;font-size:12px;font-weight:600;">要確認</span>';
+					$id             = get_the_ID();
+					$last           = get_post_meta( $id, '_affikeep_last_checked', true );
+					$rakuten_status = get_post_meta( $id, '_affikeep_rakuten_status', true ) ?: '';
+					$yahoo_status   = get_post_meta( $id, '_affikeep_yahoo_status',   true ) ?: '';
+					$rakuten_url    = get_post_meta( $id, '_affikeep_rakuten_url', true );
+					$yahoo_url      = get_post_meta( $id, '_affikeep_yahoo_url',   true );
 
 					echo '<tr>';
 					echo '<td>' . esc_html( get_the_title() ) . '</td>';
-					echo '<td>' . $badge . '</td>';
+					echo '<td>' . self::mall_badge( $rakuten_status, ! empty( $rakuten_url ) ) . '</td>';
+					echo '<td>' . self::mall_badge( $yahoo_status,   ! empty( $yahoo_url ) ) . '</td>';
 					echo '<td>' . esc_html( $last ?: '未チェック' ) . '</td>';
 					echo '<td><a href="' . esc_url( get_edit_post_link( $id ) ) . '">編集</a></td>';
 					echo '</tr>';
@@ -568,6 +568,21 @@ class AffiKeep_Admin {
 			<?php endif; ?>
 		</div>
 		<?php
+	}
+
+	/** モール別ステータスバッジを返す */
+	private static function mall_badge( string $status, bool $has_url ): string {
+		if ( ! $has_url ) {
+			return '<span style="color:#c3c4c7;font-size:11px;">—</span>';
+		}
+		switch ( $status ) {
+			case 'ok':
+				return '<span style="background:#00a32a;color:#fff;padding:2px 6px;border-radius:3px;font-size:11px;font-weight:600;">正常</span>';
+			case 'dead':
+				return '<span style="background:#d63638;color:#fff;padding:2px 6px;border-radius:3px;font-size:11px;font-weight:600;">切れ</span>';
+			default:
+				return '<span style="background:#72777c;color:#fff;padding:2px 6px;border-radius:3px;font-size:11px;font-weight:600;">未確認</span>';
+		}
 	}
 
 	// ----------------------------------------------------------------

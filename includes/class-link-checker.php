@@ -88,7 +88,8 @@ class AffiKeep_Link_Checker {
 	}
 
 	/**
-	 * 1商品の全モールURLをチェックし、総合ステータスを保存。
+	 * 1商品の全モールURLをチェックし、ステータスを保存。
+	 * 総合ステータスはAmazon除外（常にunknownのため）で判定する。
 	 * @return string ok|dead|unknown
 	 */
 	public static function check_product( int $post_id ): string {
@@ -98,21 +99,28 @@ class AffiKeep_Link_Checker {
 			'yahoo'   => get_post_meta( $post_id, '_affikeep_yahoo_url',   true ),
 		];
 
-		$statuses = [];
+		$non_amazon = []; // 楽天・Yahoo のみ集計
+
 		foreach ( $urls as $mall => $url ) {
 			if ( empty( $url ) ) {
 				continue;
 			}
-			$statuses[] = self::check_url( $url, $mall );
+			$status = self::check_url( $url, $mall );
+
+			// 楽天・Yahoo はモール別にも保存（Amazon はbot検知で常にunknownのため保存しない）
+			if ( $mall !== 'amazon' ) {
+				update_post_meta( $post_id, "_affikeep_{$mall}_status", $status );
+				$non_amazon[] = $status;
+			}
 		}
 
-		// 総合判定：1つでもdeadがあればdead、deadはないがunknownがあればunknown、それ以外ok
-		if ( in_array( 'dead', $statuses, true ) ) {
+		// 総合判定：楽天・Yahoo のみで判定（Amazon除外）
+		if ( in_array( 'dead', $non_amazon, true ) ) {
 			$overall = 'dead';
-		} elseif ( in_array( 'unknown', $statuses, true ) ) {
+		} elseif ( empty( $non_amazon ) ) {
+			$overall = 'unknown'; // 楽天・Yahoo のURLがない（Amazonのみ）
+		} elseif ( in_array( 'unknown', $non_amazon, true ) ) {
 			$overall = 'unknown';
-		} elseif ( empty( $statuses ) ) {
-			$overall = 'unknown'; // URLが1つもない
 		} else {
 			$overall = 'ok';
 		}
