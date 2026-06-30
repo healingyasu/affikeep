@@ -185,7 +185,11 @@ class AffiKeep_Meta_Box {
 			if ( ! isset( $_POST[ $key ] ) ) {
 				continue;
 			}
-			$new_val = sanitize_text_field( $_POST[ $key ] );
+			// URLフィールドはesc_url_raw()で保存（sanitize_text_fieldは%エンコードを破壊する）
+			$new_val = in_array( $key, $url_keys, true )
+				? esc_url_raw( wp_unslash( $_POST[ $key ] ) )
+				: sanitize_text_field( wp_unslash( $_POST[ $key ] ) );
+
 			if ( in_array( $key, $url_keys, true ) ) {
 				$old_val = get_post_meta( $post_id, $key, true );
 				if ( $old_val !== $new_val ) {
