@@ -214,7 +214,13 @@ class AffiKeep_Link_Checker {
 				return "bot検知ページ「{$p}」を検出（判定保留）";
 			}
 		}
-		$dead_phrases = [ '現在お取り扱いできません', 'この商品は現在お取り扱いできません', 'ページが見つかりませんでした', 'Page Not Found' ];
+		$unknown_phrases = [ '現在お取り扱いできません', 'この商品は現在お取り扱いできません' ];
+		foreach ( $unknown_phrases as $p ) {
+			if ( mb_stripos( $body, $p ) !== false ) {
+				return "要確認文言「{$p}」を検出（bot検知の可能性あり）";
+			}
+		}
+		$dead_phrases = [ 'ページが見つかりませんでした', 'Page Not Found' ];
 		foreach ( $dead_phrases as $p ) {
 			if ( mb_stripos( $body, $p ) !== false ) {
 				return "終了文言「{$p}」を検出";
@@ -236,11 +242,16 @@ class AffiKeep_Link_Checker {
 			}
 		}
 
-		// 販売終了・取り扱いなし → dead
-		$dead_phrases = [
-			'現在お取り扱いできません', 'この商品は現在お取り扱いできません',
-			'ページが見つかりませんでした', 'Page Not Found',
-		];
+		// 「現在お取り扱いできません」はbot検知時にも出るためunknown扱い（再試行で判断）
+		$unknown_phrases = [ '現在お取り扱いできません', 'この商品は現在お取り扱いできません' ];
+		foreach ( $unknown_phrases as $p ) {
+			if ( mb_stripos( $body, $p ) !== false ) {
+				return 'unknown';
+			}
+		}
+
+		// 明確な404ページ文言 → dead
+		$dead_phrases = [ 'ページが見つかりませんでした', 'Page Not Found' ];
 		foreach ( $dead_phrases as $p ) {
 			if ( mb_stripos( $body, $p ) !== false ) {
 				return 'dead';
