@@ -96,6 +96,12 @@ class AffiKeep_Rest_API {
 			return new WP_REST_Response( [ 'items' => [] ], 200 );
 		}
 
+		// デバッグ：1件目の生データ構造を記録（URL欠落の原因調査用）
+		AffiKeep_Logger::log( '楽天API 1件目の生データ', AffiKeep_Logger::LEVEL_INFO, [
+			'first_item_keys' => array_keys( (array) $body['Items'][0] ),
+			'first_item'      => $body['Items'][0],
+		] );
+
 		$items = array_map( function ( $item ) {
 			return [
 				'title'       => $item['itemName'],
