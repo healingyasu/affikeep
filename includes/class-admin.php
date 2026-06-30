@@ -97,6 +97,16 @@ class AffiKeep_Admin {
 			'affikeep-error-log',
 			[ __CLASS__, 'page_error_log' ]
 		);
+
+		// インポート
+		add_submenu_page(
+			'affikeep',
+			'インポート | AffiKeep',
+			'インポート',
+			'manage_options',
+			'affikeep-import',
+			[ 'AffiKeep_Rinker_Import', 'render_page' ]
+		);
 	}
 
 	public static function enqueue_assets( string $hook ): void {
