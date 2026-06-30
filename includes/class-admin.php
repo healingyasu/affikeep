@@ -7,6 +7,9 @@ class AffiKeep_Admin {
 		add_action( 'admin_menu',             [ __CLASS__, 'add_menus' ] );
 		add_action( 'admin_enqueue_scripts',  [ __CLASS__, 'enqueue_assets' ] );
 		add_action( 'admin_post_affikeep_clear_log', [ __CLASS__, 'handle_clear_log' ] );
+		add_action( 'wp_ajax_affikeep_get_product_articles', [ __CLASS__, 'ajax_get_product_articles' ] );
+		add_action( 'wp_ajax_affikeep_hide_in_article',      [ __CLASS__, 'ajax_hide_in_article' ] );
+		add_action( 'wp_ajax_affikeep_delete_from_article',  [ __CLASS__, 'ajax_delete_from_article' ] );
 	}
 
 	public static function on_activate(): void {
@@ -555,6 +558,136 @@ class AffiKeep_Admin {
 			<?php endif; ?>
 		</div>
 		<?php
+	}
+
+	// ----------------------------------------------------------------
+	// AJAX: 掲載記事一覧
+	// ----------------------------------------------------------------
+
+	public static function ajax_get_product_articles(): void {
+		check_ajax_referer( 'affikeep_articles', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( '権限がありません' );
+		}
+
+		$product_id = intval( $_POST['product_id'] ?? 0 );
+		if ( ! $product_id ) {
+			wp_send_json_error( '商品IDが無効です' );
+		}
+
+		wp_send_json_success( self::get_articles_with_product( $product_id ) );
+	}
+
+	public static function ajax_hide_in_article(): void {
+		check_ajax_referer( 'affikeep_articles', 'nonce' );
+		if ( ! current_user_can( 'edit_posts' ) ) {
+			wp_send_json_error( '権限がありません' );
+		}
+
+		$product_id = intval( $_POST['product_id'] ?? 0 );
+		$post_id    = intval( $_POST['post_id'] ?? 0 );
+		$hide       = ! empty( $_POST['hide'] ) && $_POST['hide'] !== '0';
+
+		if ( ! $product_id || ! $post_id ) {
+			wp_send_json_error( 'IDが無効です' );
+		}
+
+		$post = get_post( $post_id );
+		if ( ! $post ) {
+			wp_send_json_error( '記事が見つかりません' );
+		}
+
+		$new_content = preg_replace_callback(
+			'/<!-- wp:affikeep\/product (\{[^}]*\}) \/-->/',
+			function ( $matches ) use ( $product_id, $hide ) {
+				$attrs = json_decode( $matches[1], true );
+				if ( ! is_array( $attrs ) || intval( $attrs['product_id'] ?? 0 ) !== $product_id ) {
+					return $matches[0];
+				}
+				if ( $hide ) {
+					$attrs['hidden'] = true;
+				} else {
+					unset( $attrs['hidden'] );
+				}
+				return '<!-- wp:affikeep/product ' . wp_json_encode( $attrs ) . ' /-->';
+			},
+			$post->post_content
+		);
+
+		wp_update_post( [ 'ID' => $post_id, 'post_content' => $new_content ] );
+		wp_send_json_success();
+	}
+
+	public static function ajax_delete_from_article(): void {
+		check_ajax_referer( 'affikeep_articles', 'nonce' );
+		if ( ! current_user_can( 'edit_posts' ) ) {
+			wp_send_json_error( '権限がありません' );
+		}
+
+		$product_id = intval( $_POST['product_id'] ?? 0 );
+		$post_id    = intval( $_POST['post_id'] ?? 0 );
+
+		if ( ! $product_id || ! $post_id ) {
+			wp_send_json_error( 'IDが無効です' );
+		}
+
+		$post = get_post( $post_id );
+		if ( ! $post ) {
+			wp_send_json_error( '記事が見つかりません' );
+		}
+
+		$new_content = preg_replace_callback(
+			'/<!-- wp:affikeep\/product (\{[^}]*\}) \/-->/',
+			function ( $matches ) use ( $product_id ) {
+				$attrs = json_decode( $matches[1], true );
+				if ( ! is_array( $attrs ) || intval( $attrs['product_id'] ?? 0 ) !== $product_id ) {
+					return $matches[0];
+				}
+				return '';
+			},
+			$post->post_content
+		);
+
+		wp_update_post( [ 'ID' => $post_id, 'post_content' => $new_content ] );
+		wp_send_json_success();
+	}
+
+	private static function get_articles_with_product( int $product_id ): array {
+		global $wpdb;
+		$pattern = '%"product_id":' . $product_id . '%';
+		$rows    = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT ID, post_title, post_status
+				 FROM {$wpdb->posts}
+				 WHERE post_content LIKE %s
+				 AND post_status NOT IN ('trash','auto-draft')
+				 AND post_type IN ('post','page')",
+				$pattern
+			),
+			ARRAY_A
+		);
+
+		$result = [];
+		foreach ( $rows as $row ) {
+			$p = get_post( intval( $row['ID'] ) );
+			if ( ! $p ) continue;
+			if ( ! preg_match( '/<!-- wp:affikeep\/product \{[^}]*"product_id"\s*:\s*' . $product_id . '[^}]*\} \/-->/', $p->post_content ) ) {
+				continue;
+			}
+			$hidden = false;
+			if ( preg_match( '/<!-- wp:affikeep\/product (\{[^}]*\}) \/-->/', $p->post_content, $m ) ) {
+				$attrs  = json_decode( $m[1], true );
+				$hidden = is_array( $attrs ) && intval( $attrs['product_id'] ?? 0 ) === $product_id && ! empty( $attrs['hidden'] );
+			}
+			$result[] = [
+				'id'       => intval( $row['ID'] ),
+				'title'    => $row['post_title'],
+				'status'   => $row['post_status'],
+				'edit_url' => get_edit_post_link( intval( $row['ID'] ), 'raw' ),
+				'hidden'   => $hidden,
+			];
+		}
+		return $result;
 	}
 
 	/** ログ消去ハンドラ */

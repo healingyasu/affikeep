@@ -17,6 +17,10 @@ class AffiKeep_Block {
 						'type'    => 'number',
 						'default' => 0,
 					],
+					'hidden' => [
+						'type'    => 'boolean',
+						'default' => false,
+					],
 				],
 			] );
 
@@ -46,7 +50,7 @@ class AffiKeep_Block {
 	public static function render( array $attributes ): string {
 		$product_id = intval( $attributes['product_id'] ?? 0 );
 
-		if ( ! $product_id ) {
+		if ( ! $product_id || ! empty( $attributes['hidden'] ) ) {
 			return '';
 		}
 

@@ -36,6 +36,14 @@ class AffiKeep_Meta_Box {
 			'normal',
 			'high'
 		);
+		add_meta_box(
+			'affikeep_product_articles',
+			'掲載記事一覧',
+			[ __CLASS__, 'render_articles' ],
+			AffiKeep_Post_Type::CPT,
+			'normal',
+			'default'
+		);
 	}
 
 	public static function render( WP_Post $post ): void {
@@ -168,6 +176,125 @@ class AffiKeep_Meta_Box {
 				</td>
 			</tr>
 		</table>
+		<?php
+	}
+
+	public static function render_articles( WP_Post $post ): void {
+		$nonce = wp_create_nonce( 'affikeep_articles' );
+		?>
+		<style>
+		.ak-articles-list { margin:0; padding:0; list-style:none; }
+		.ak-articles-list li {
+			display:flex; align-items:center; gap:8px;
+			padding:8px 0; border-bottom:1px solid #f0f0f1;
+		}
+		.ak-articles-list li:last-child { border-bottom:none; }
+		.ak-article-title { flex:1; font-size:13px; }
+		.ak-article-status { color:#787c82; font-size:11px; }
+		.ak-article-hidden-badge {
+			font-size:11px; background:#f0f0f1; color:#787c82;
+			padding:1px 6px; border-radius:3px;
+		}
+		.ak-bulk-btn { opacity:.45; cursor:not-allowed !important; }
+		.ak-badge-dev {
+			font-size:10px; background:#72777c; color:#fff;
+			padding:1px 5px; border-radius:3px; margin-left:4px; vertical-align:middle;
+		}
+		</style>
+
+		<div id="ak-articles-container">
+			<p style="color:#787c82;">読み込み中...</p>
+		</div>
+
+		<div style="margin-top:12px; padding-top:12px; border-top:1px solid #f0f0f1;">
+			<button type="button" class="button ak-bulk-btn" disabled
+				title="この機能は今後のアップデートで追加予定です">
+				全記事から一括削除
+				<span class="ak-badge-dev">開発中</span>
+			</button>
+		</div>
+
+		<script>
+		(function() {
+			var productId = <?php echo intval( $post->ID ); ?>;
+			var nonce     = '<?php echo esc_js( $nonce ); ?>';
+			var container = document.getElementById('ak-articles-container');
+
+			function load() {
+				post('affikeep_get_product_articles', {}).then(function(data) {
+					if (!data.success || !data.data.length) {
+						container.innerHTML = '<p style="color:#787c82;">この商品を貼り付けた記事はありません。</p>';
+						return;
+					}
+					renderList(data.data);
+				}).catch(function() {
+					container.innerHTML = '<p style="color:#d63638;">読み込みに失敗しました。</p>';
+				});
+			}
+
+			function renderList(articles) {
+				var ul = document.createElement('ul');
+				ul.className = 'ak-articles-list';
+				articles.forEach(function(a) {
+					var statusMap = {publish:'公開', draft:'下書き', private:'非公開'};
+					var li = document.createElement('li');
+					li.innerHTML =
+						'<span class="ak-article-title">' +
+						'  <a href="' + h(a.edit_url) + '" target="_blank">' + h(a.title || '（タイトルなし）') + '</a>' +
+						'  <span class="ak-article-status">（' + h(statusMap[a.status] || a.status) + '）</span>' +
+						(a.hidden ? ' <span class="ak-article-hidden-badge">非表示中</span>' : '') +
+						'</span>' +
+						'<button type="button" class="button button-small" data-action="hide" data-post-id="' + a.id + '" data-hide="' + (a.hidden ? '0' : '1') + '">' +
+						(a.hidden ? '表示に戻す' : '非表示') + '</button>' +
+						'<button type="button" class="button button-small" data-action="delete" data-post-id="' + a.id + '" style="color:#d63638;">削除</button>';
+					ul.appendChild(li);
+				});
+
+				ul.addEventListener('click', function(e) {
+					var btn = e.target.closest('button[data-action]');
+					if (!btn) return;
+					var action = btn.dataset.action;
+					var postId = btn.dataset.postId;
+					if (action === 'hide') {
+						doHide(postId, btn.dataset.hide);
+					} else if (action === 'delete') {
+						if (!confirm('この記事からAffiKeepブロックを削除します。元に戻せません。続けますか？')) return;
+						doDelete(postId);
+					}
+				});
+
+				container.innerHTML = '';
+				container.appendChild(ul);
+			}
+
+			function doHide(postId, hide) {
+				post('affikeep_hide_in_article', {post_id: postId, hide: hide}).then(function(d) {
+					if (d.success) load(); else alert('処理に失敗しました。');
+				});
+			}
+
+			function doDelete(postId) {
+				post('affikeep_delete_from_article', {post_id: postId}).then(function(d) {
+					if (d.success) load(); else alert('処理に失敗しました。');
+				});
+			}
+
+			function post(action, extra) {
+				var fd = new FormData();
+				fd.append('action', action);
+				fd.append('product_id', productId);
+				fd.append('nonce', nonce);
+				Object.keys(extra).forEach(function(k) { fd.append(k, extra[k]); });
+				return fetch(ajaxurl, {method:'POST', body:fd}).then(function(r) { return r.json(); });
+			}
+
+			function h(s) {
+				return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+			}
+
+			load();
+		})();
+		</script>
 		<?php
 	}
 
