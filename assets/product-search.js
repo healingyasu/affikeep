@@ -95,4 +95,17 @@ document.addEventListener('DOMContentLoaded', function () {
 		var el = document.querySelector('[name="' + name + '"]');
 		if ( el ) el.value = val;
 	}
+
+	// 「🔗 開く」ボタン：入力欄の現在のURLを別タブで開く（保存前でも確認可能）
+	document.querySelectorAll('.ak-open-url').forEach( function (btn) {
+		btn.addEventListener('click', function () {
+			var input = document.getElementById( this.dataset.target );
+			var url   = input ? input.value.trim() : '';
+			if ( ! url ) {
+				alert('URLが入力されていません。');
+				return;
+			}
+			window.open( url, '_blank', 'noopener' );
+		});
+	});
 });

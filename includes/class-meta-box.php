@@ -87,6 +87,9 @@ class AffiKeep_Meta_Box {
 		.affikeep-meta-table input[type=url],
 		.affikeep-meta-table input[type=number] { width:100%; max-width:480px; }
 		.affikeep-meta-table .desc { color:#787c82; font-size:12px; margin-top:4px; }
+		.ak-url-row { display:flex; gap:8px; align-items:center; max-width:600px; }
+		.ak-url-row input { flex:1; }
+		.ak-open-url { flex-shrink:0; white-space:nowrap; }
 		.affikeep-status { display:inline-block; padding:2px 8px; border-radius:3px; font-size:12px; font-weight:600; }
 		.affikeep-status-ok     { background:#00a32a; color:#fff; }
 		.affikeep-status-dead   { background:#d63638; color:#fff; }
@@ -113,8 +116,11 @@ class AffiKeep_Meta_Box {
 			<tr>
 				<th><label for="ak_amazon_url">Amazon URL</label></th>
 				<td>
-					<input type="url" id="ak_amazon_url" name="_affikeep_amazon_url"
-						value="<?php echo $get( '_affikeep_amazon_url' ); ?>" placeholder="https://www.amazon.co.jp/dp/...">
+					<div class="ak-url-row">
+						<input type="url" id="ak_amazon_url" name="_affikeep_amazon_url"
+							value="<?php echo $get( '_affikeep_amazon_url' ); ?>" placeholder="https://www.amazon.co.jp/dp/...">
+						<button type="button" class="button ak-open-url" data-target="ak_amazon_url">🔗 開く</button>
+					</div>
 				</td>
 			</tr>
 			<tr>
@@ -128,15 +134,21 @@ class AffiKeep_Meta_Box {
 			<tr>
 				<th><label for="ak_rakuten_url">楽天市場 URL</label></th>
 				<td>
-					<input type="url" id="ak_rakuten_url" name="_affikeep_rakuten_url"
-						value="<?php echo $get( '_affikeep_rakuten_url' ); ?>" placeholder="https://item.rakuten.co.jp/...">
+					<div class="ak-url-row">
+						<input type="url" id="ak_rakuten_url" name="_affikeep_rakuten_url"
+							value="<?php echo $get( '_affikeep_rakuten_url' ); ?>" placeholder="https://item.rakuten.co.jp/...">
+						<button type="button" class="button ak-open-url" data-target="ak_rakuten_url">🔗 開く</button>
+					</div>
 				</td>
 			</tr>
 			<tr>
 				<th><label for="ak_yahoo_url">Yahoo!ショッピング URL</label></th>
 				<td>
-					<input type="url" id="ak_yahoo_url" name="_affikeep_yahoo_url"
-						value="<?php echo $get( '_affikeep_yahoo_url' ); ?>" placeholder="https://shopping.yahoo.co.jp/...">
+					<div class="ak-url-row">
+						<input type="url" id="ak_yahoo_url" name="_affikeep_yahoo_url"
+							value="<?php echo $get( '_affikeep_yahoo_url' ); ?>" placeholder="https://shopping.yahoo.co.jp/...">
+						<button type="button" class="button ak-open-url" data-target="ak_yahoo_url">🔗 開く</button>
+					</div>
 				</td>
 			</tr>
 			<tr>
