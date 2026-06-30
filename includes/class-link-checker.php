@@ -179,7 +179,15 @@ class AffiKeep_Link_Checker {
 
 		// 楽天・Yahoo：200系なら基本ok。本文に終了文言があればdead
 		if ( $code >= 200 && $code < 400 ) {
-			if ( self::body_has_dead_phrase( $body ) ) {
+			$matched = self::find_dead_phrase( $body );
+			// デバッグ：判定結果を記録（誤検知調査用）
+			AffiKeep_Logger::log( "リンクチェック詳細（{$mall}）", AffiKeep_Logger::LEVEL_INFO, [
+				'url'      => $url,
+				'code'     => $code,
+				'matched'  => $matched ?: '(なし→正常)',
+				'judgment' => $matched ? 'dead' : 'ok',
+			] );
+			if ( $matched ) {
 				return 'dead';
 			}
 			return 'ok';
@@ -219,18 +227,18 @@ class AffiKeep_Link_Checker {
 		return 'unknown';
 	}
 
-	/** 楽天・Yahoo共通の終了文言判定 */
-	private static function body_has_dead_phrase( string $body ): bool {
+	/** 楽天・Yahoo共通の終了文言判定。マッチした文言を返す（なければ空文字） */
+	private static function find_dead_phrase( string $body ): string {
 		$phrases = [
 			'販売を終了', 'ページが見つかりません', '商品が見つかりません',
 			'お探しのページは見つかりませんでした', 'この商品は現在販売されておりません',
 		];
 		foreach ( $phrases as $p ) {
 			if ( mb_stripos( $body, $p ) !== false ) {
-				return true;
+				return $p;
 			}
 		}
-		return false;
+		return '';
 	}
 
 	/** リンク切れ件数を数える（バッジ・ダッシュボード用） */
