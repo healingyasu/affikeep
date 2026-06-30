@@ -17,7 +17,7 @@
 defined( 'ABSPATH' ) || exit;
 
 define( 'AFFIKEEP_VERSION', '0.1.0' );
-define( 'AFFIKEEP_BUILD',   '2026-06-30 11:15' );
+define( 'AFFIKEEP_BUILD',   '2026-06-30 11:30 (Git Updater対応)' );
 define( 'AFFIKEEP_DIR',     plugin_dir_path( __FILE__ ) );
 define( 'AFFIKEEP_URL',     plugin_dir_url( __FILE__ ) );
 define( 'AFFIKEEP_SLUG',    'affikeep' );
