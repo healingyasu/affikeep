@@ -1,0 +1,551 @@
+<?php
+defined( 'ABSPATH' ) || exit;
+
+class AffiKeep_Admin {
+
+	public static function init(): void {
+		add_action( 'admin_menu',             [ __CLASS__, 'add_menus' ] );
+		add_action( 'admin_enqueue_scripts',  [ __CLASS__, 'enqueue_assets' ] );
+		add_action( 'admin_post_affikeep_clear_log', [ __CLASS__, 'handle_clear_log' ] );
+	}
+
+	public static function on_activate(): void {
+		AffiKeep_Logger::log( 'AffiKeep を有効化しました。', AffiKeep_Logger::LEVEL_INFO );
+		AffiKeep_Link_Checker::schedule();
+	}
+
+	public static function on_deactivate(): void {
+		AffiKeep_Link_Checker::unschedule();
+	}
+
+	public static function add_menus(): void {
+		// リンク切れ件数バッジ（プラグイン更新数字と同じ仕組み）
+		$dead   = AffiKeep_Link_Checker::count_dead();
+		$badge  = $dead
+			? ' <span class="awaiting-mod count-' . $dead . '"><span class="pending-count">' . $dead . '</span></span>'
+			: '';
+
+		// 親メニュー
+		add_menu_page(
+			'AffiKeep',
+			'AffiKeep' . $badge,
+			'manage_options',
+			'affikeep',
+			[ __CLASS__, 'page_dashboard' ],
+			'dashicons-cart',
+			58
+		);
+
+		// ダッシュボード
+		add_submenu_page(
+			'affikeep',
+			'ダッシュボード',
+			'ダッシュボード',
+			'manage_options',
+			'affikeep',
+			[ __CLASS__, 'page_dashboard' ]
+		);
+
+		// 設定
+		add_submenu_page(
+			'affikeep',
+			'設定 | AffiKeep',
+			'設定',
+			'manage_options',
+			'affikeep-settings',
+			[ __CLASS__, 'page_settings' ]
+		);
+
+		// 商品一覧
+		add_submenu_page(
+			'affikeep',
+			'商品一覧 | AffiKeep',
+			'商品一覧',
+			'manage_options',
+			'edit.php?post_type=affikeep_product'
+		);
+
+		// 商品を追加
+		add_submenu_page(
+			'affikeep',
+			'商品を追加 | AffiKeep',
+			'商品を追加',
+			'manage_options',
+			'post-new.php?post_type=affikeep_product'
+		);
+
+		// リンク切れ
+		$links_label = 'リンク切れ' . ( $dead ? " ({$dead})" : '' );
+		add_submenu_page(
+			'affikeep',
+			'リンク切れ | AffiKeep',
+			$links_label,
+			'manage_options',
+			'affikeep-links',
+			[ __CLASS__, 'page_links' ]
+		);
+
+		// エラーログ
+		add_submenu_page(
+			'affikeep',
+			'エラーログ | AffiKeep',
+			'エラーログ',
+			'manage_options',
+			'affikeep-error-log',
+			[ __CLASS__, 'page_error_log' ]
+		);
+	}
+
+	public static function enqueue_assets( string $hook ): void {
+		if ( strpos( $hook, 'affikeep' ) === false ) {
+			return;
+		}
+		wp_enqueue_style(
+			'affikeep-admin',
+			AFFIKEEP_URL . 'assets/admin.css',
+			[],
+			AFFIKEEP_VERSION
+		);
+	}
+
+	// ----------------------------------------------------------------
+	// ページ: ダッシュボード
+	// ----------------------------------------------------------------
+	public static function page_dashboard(): void {
+		$log_url      = admin_url( 'admin.php?page=affikeep-error-log' );
+		$links_url    = admin_url( 'admin.php?page=affikeep-links' );
+		$settings_url = admin_url( 'admin.php?page=affikeep-settings' );
+		$errors       = array_filter( AffiKeep_Logger::get_all(), fn( $e ) => $e['level'] === 'error' );
+		$error_count  = count( $errors );
+		$counts       = AffiKeep_Link_Checker::count_by_status();
+		?>
+		<div class="wrap affikeep-wrap">
+			<h1>AffiKeep ダッシュボード
+				<span style="font-size:13px;font-weight:400;color:#787c82;margin-left:12px;">
+					v<?php echo AFFIKEEP_VERSION; ?> &nbsp;|&nbsp; ビルド: <?php echo AFFIKEEP_BUILD; ?>
+				</span>
+			</h1>
+
+			<div class="affikeep-cards">
+
+				<div class="affikeep-card <?php echo $counts['dead'] > 0 ? 'affikeep-card--alert' : ''; ?>">
+					<h2>リンク切れ</h2>
+					<p class="affikeep-big-num"><?php echo esc_html( $counts['dead'] ); ?></p>
+					<p class="affikeep-note">
+						正常 <?php echo esc_html( $counts['ok'] ); ?> ／
+						要確認 <?php echo esc_html( $counts['unknown'] ); ?>
+					</p>
+					<a href="<?php echo esc_url( $links_url ); ?>" class="button <?php echo $counts['dead'] > 0 ? 'button-primary' : ''; ?>">リンクを確認</a>
+				</div>
+
+				<div class="affikeep-card <?php echo $error_count > 0 ? 'affikeep-card--alert' : ''; ?>">
+					<h2>エラーログ</h2>
+					<p class="affikeep-big-num"><?php echo esc_html( $error_count ); ?></p>
+					<?php if ( $error_count > 0 ) : ?>
+						<a href="<?php echo esc_url( $log_url ); ?>" class="button button-primary">ログを確認する</a>
+					<?php else : ?>
+						<p class="affikeep-note">エラーはありません</p>
+					<?php endif; ?>
+				</div>
+
+				<div class="affikeep-card">
+					<h2>設定</h2>
+					<p class="affikeep-note">APIキー・アフィリエイトIDを登録してください</p>
+					<a href="<?php echo esc_url( $settings_url ); ?>" class="button">設定を開く</a>
+				</div>
+
+			</div>
+		</div>
+		<?php
+	}
+
+	// ----------------------------------------------------------------
+	// ページ: リンク切れ
+	// ----------------------------------------------------------------
+	public static function page_links(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+
+		$counts = AffiKeep_Link_Checker::count_by_status();
+
+		// チェック直後のメッセージ
+		$just_checked = isset( $_GET['checked'] );
+		?>
+		<div class="wrap affikeep-wrap">
+			<h1>リンク切れチェック</h1>
+
+			<?php if ( $just_checked ) : ?>
+				<div class="notice notice-success is-dismissible" style="padding:12px 16px;">
+					<strong><?php echo intval( $_GET['checked'] ); ?>件</strong>をチェックしました。
+					うち <strong><?php echo intval( $_GET['dead'] ); ?>件</strong> がリンク切れです。
+				</div>
+			<?php endif; ?>
+
+			<div class="affikeep-cards" style="margin-bottom:20px;">
+				<div class="affikeep-card <?php echo $counts['dead'] > 0 ? 'affikeep-card--alert' : ''; ?>">
+					<h2>リンク切れ</h2>
+					<p class="affikeep-big-num"><?php echo esc_html( $counts['dead'] ); ?></p>
+				</div>
+				<div class="affikeep-card">
+					<h2>要確認</h2>
+					<p class="affikeep-big-num"><?php echo esc_html( $counts['unknown'] ); ?></p>
+					<p class="affikeep-note">時間を置いて再確認します</p>
+				</div>
+				<div class="affikeep-card">
+					<h2>正常</h2>
+					<p class="affikeep-big-num"><?php echo esc_html( $counts['ok'] ); ?></p>
+				</div>
+			</div>
+
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin-bottom:20px;">
+				<input type="hidden" name="action" value="affikeep_check_now">
+				<?php wp_nonce_field( 'affikeep_check_now' ); ?>
+				<button type="submit" class="button button-primary">今すぐチェック（最大<?php echo AffiKeep_Link_Checker::BATCH; ?>件）</button>
+				<span class="description" style="margin-left:8px;">商品数が多い場合は、ボタンを複数回押すと古いものから順にチェックされます。</span>
+			</form>
+
+			<?php
+			// リンク切れ・要確認の商品を一覧
+			$problem = new WP_Query( [
+				'post_type'      => AffiKeep_Post_Type::CPT,
+				'post_status'    => 'publish',
+				'posts_per_page' => -1,
+				'meta_query'     => [
+					'relation' => 'OR',
+					[ 'key' => '_affikeep_link_status', 'value' => 'dead' ],
+					[ 'key' => '_affikeep_link_status', 'value' => 'unknown' ],
+				],
+			] );
+
+			if ( ! $problem->have_posts() ) {
+				echo '<p>リンク切れ・要確認の商品はありません。</p>';
+			} else {
+				echo '<table class="widefat striped"><thead><tr>';
+				echo '<th>商品名</th><th style="width:100px;">状態</th><th style="width:160px;">最終チェック</th><th style="width:80px;">編集</th>';
+				echo '</tr></thead><tbody>';
+
+				while ( $problem->have_posts() ) {
+					$problem->the_post();
+					$id     = get_the_ID();
+					$status = get_post_meta( $id, '_affikeep_link_status', true ) ?: 'unknown';
+					$last   = get_post_meta( $id, '_affikeep_last_checked', true );
+
+					$badge = $status === 'dead'
+						? '<span style="background:#d63638;color:#fff;padding:2px 8px;border-radius:3px;font-size:12px;font-weight:600;">リンク切れ</span>'
+						: '<span style="background:#72777c;color:#fff;padding:2px 8px;border-radius:3px;font-size:12px;font-weight:600;">要確認</span>';
+
+					echo '<tr>';
+					echo '<td>' . esc_html( get_the_title() ) . '</td>';
+					echo '<td>' . $badge . '</td>';
+					echo '<td>' . esc_html( $last ?: '未チェック' ) . '</td>';
+					echo '<td><a href="' . esc_url( get_edit_post_link( $id ) ) . '">編集</a></td>';
+					echo '</tr>';
+				}
+				echo '</tbody></table>';
+				wp_reset_postdata();
+			}
+			?>
+		</div>
+		<?php
+	}
+
+	// ----------------------------------------------------------------
+	// ページ: 設定
+	// ----------------------------------------------------------------
+	public static function page_settings(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		?>
+		<div class="wrap affikeep-wrap">
+			<h1>AffiKeep 設定</h1>
+
+			<?php if ( isset( $_GET['settings-updated'] ) ) : ?>
+				<div class="notice notice-success is-dismissible" style="padding:12px 16px;font-size:14px;">
+					<strong>保存しました。</strong>
+				</div>
+			<?php endif; ?>
+
+			<form method="post" action="options.php">
+				<?php settings_fields( 'affikeep_settings_group' ); ?>
+
+				<?php $s = AffiKeep_Settings::get(); ?>
+
+				<h2 class="affikeep-section-title">楽天 Web API</h2>
+				<p class="description" style="margin-bottom:12px;">
+					アプリID・アクセスキー・アプリケーションURLの3つが必要です（2026年5月以降）。<br>
+					<a href="https://webservice.rakuten.co.jp/" target="_blank" rel="noopener">楽天デベロッパーサイト</a> でアプリを登録・確認してください。
+				</p>
+				<table class="form-table">
+					<tr>
+						<th><label for="ak_rakuten_app_id">アプリケーションID</label></th>
+						<td>
+							<input type="text" id="ak_rakuten_app_id"
+								name="affikeep_settings[rakuten_app_id]"
+								value="<?php echo esc_attr( $s['rakuten_app_id'] ); ?>"
+								class="regular-text">
+						</td>
+					</tr>
+					<tr>
+						<th><label for="ak_rakuten_access_key">アクセスキー</label></th>
+						<td>
+							<input type="text" id="ak_rakuten_access_key"
+								name="affikeep_settings[rakuten_access_key]"
+								value="<?php echo esc_attr( $s['rakuten_access_key'] ); ?>"
+								class="regular-text">
+						</td>
+					</tr>
+					<tr>
+						<th><label for="ak_rakuten_app_url">アプリケーションURL</label></th>
+						<td>
+							<input type="url" id="ak_rakuten_app_url"
+								name="affikeep_settings[rakuten_app_url]"
+								value="<?php echo esc_attr( $s['rakuten_app_url'] ); ?>"
+								class="regular-text"
+								placeholder="https://example.com">
+							<p class="description">楽天デベロッパーに登録したサイトのURL</p>
+						</td>
+					</tr>
+					<tr>
+						<th><label for="ak_rakuten_affiliate_id">アフィリエイトID</label></th>
+						<td>
+							<input type="text" id="ak_rakuten_affiliate_id"
+								name="affikeep_settings[rakuten_affiliate_id]"
+								value="<?php echo esc_attr( $s['rakuten_affiliate_id'] ); ?>"
+								class="regular-text">
+							<p class="description">
+								<a href="https://affiliate.rakuten.co.jp/" target="_blank" rel="noopener">楽天アフィリエイト</a> の管理画面で確認できます。
+							</p>
+						</td>
+					</tr>
+				</table>
+
+				<h2 class="affikeep-section-title">Amazon アソシエイツ</h2>
+				<p class="description" style="margin-bottom:12px;">
+					<a href="https://affiliate.amazon.co.jp/" target="_blank" rel="noopener">Amazonアソシエイト</a> に登録済みのトラッキングIDを入力してください。
+				</p>
+				<table class="form-table">
+					<tr>
+						<th><label for="ak_amazon_tracking_id">トラッキングID</label></th>
+						<td>
+							<input type="text" id="ak_amazon_tracking_id"
+								name="affikeep_settings[amazon_tracking_id]"
+								value="<?php echo esc_attr( $s['amazon_tracking_id'] ); ?>"
+								class="regular-text"
+								placeholder="yoursite-22">
+							<p class="description">管理画面「トラッキングIDの管理」で確認できます。</p>
+						</td>
+					</tr>
+				</table>
+
+				<h2 class="affikeep-section-title">Yahoo!ショッピング（バリューコマース）</h2>
+				<p class="description" style="margin-bottom:12px;">
+					LinkSwitch か アフィリエイトID のどちらかを入力してください。両方入力した場合は LinkSwitch が優先されます。<br>
+					<a href="https://www.valuecommerce.ne.jp/" target="_blank" rel="noopener">バリューコマース管理画面</a> で確認できます。
+				</p>
+				<table class="form-table">
+					<tr>
+						<th><label for="ak_yahoo_linkswitch">LinkSwitch</label></th>
+						<td>
+							<input type="text" id="ak_yahoo_linkswitch"
+								name="affikeep_settings[yahoo_linkswitch]"
+								value="<?php echo esc_attr( $s['yahoo_linkswitch'] ); ?>"
+								class="regular-text">
+						</td>
+					</tr>
+					<tr>
+						<th><label for="ak_yahoo_affiliate_id">アフィリエイトID</label></th>
+						<td>
+							<input type="text" id="ak_yahoo_affiliate_id"
+								name="affikeep_settings[yahoo_affiliate_id]"
+								value="<?php echo esc_attr( $s['yahoo_affiliate_id'] ); ?>"
+								class="regular-text">
+						</td>
+					</tr>
+				</table>
+
+				<h2 class="affikeep-section-title">もしもアフィリエイト（URL変換用）</h2>
+				<div class="notice notice-info inline" style="padding:10px 14px;margin-bottom:14px;">
+					<p style="margin:0;">
+						<strong>a_id はもしもアカウント共通の1つの数字です。</strong><br>
+						Amazon・楽天・Yahoo! で別々に設定する必要はありません。1か所に入力するだけで全モールに適用されます。<br><br>
+						<strong>確認方法：</strong>
+						もしもで取得した<strong>どの広告コードのHTMLでも</strong>、中に <code>a_id=数字</code> という部分があります。その数字だけをコピーしてください。<br><br>
+						例：<code>a_id=<strong>1234567</strong>&amp;p_id=...</code> → 入力するのは <code>1234567</code> だけ
+					</p>
+				</div>
+				<table class="form-table">
+					<tr>
+						<th><label for="ak_moshimo_aid">a_id</label></th>
+						<td>
+							<input type="text" id="ak_moshimo_aid"
+								name="affikeep_settings[moshimo_aid]"
+								value="<?php echo esc_attr( $s['moshimo_aid'] ); ?>"
+								class="regular-text"
+								placeholder="例: 1234567">
+							<p class="description">入力するとAmazon・楽天・Yahoo!のリンクが自動的にもしも経由に変換されます。もしもを使わない場合は空欄のままでOKです。</p>
+						</td>
+					</tr>
+				</table>
+
+				<h2 class="affikeep-section-title">通知設定</h2>
+				<table class="form-table">
+					<tr>
+						<th><label for="ak_notify_email">通知先メールアドレス</label></th>
+						<td>
+							<input type="email" id="ak_notify_email"
+								name="affikeep_settings[notify_email]"
+								value="<?php echo esc_attr( $s['notify_email'] ); ?>"
+								class="regular-text">
+							<p class="description">空欄の場合はWordPress管理者メールに送信</p>
+						</td>
+					</tr>
+				</table>
+
+				<h2 class="affikeep-section-title">ボタン表示テキスト</h2>
+				<table class="form-table">
+					<tr>
+						<th><label for="ak_btn_amazon">Amazonボタン</label></th>
+						<td>
+							<input type="text" id="ak_btn_amazon"
+								name="affikeep_settings[button_text_amazon]"
+								value="<?php echo esc_attr( $s['button_text_amazon'] ); ?>"
+								class="regular-text">
+						</td>
+					</tr>
+					<tr>
+						<th><label for="ak_btn_rakuten">楽天ボタン</label></th>
+						<td>
+							<input type="text" id="ak_btn_rakuten"
+								name="affikeep_settings[button_text_rakuten]"
+								value="<?php echo esc_attr( $s['button_text_rakuten'] ); ?>"
+								class="regular-text">
+						</td>
+					</tr>
+					<tr>
+						<th><label for="ak_btn_yahoo">Yahoo!ボタン</label></th>
+						<td>
+							<input type="text" id="ak_btn_yahoo"
+								name="affikeep_settings[button_text_yahoo]"
+								value="<?php echo esc_attr( $s['button_text_yahoo'] ); ?>"
+								class="regular-text">
+						</td>
+					</tr>
+				</table>
+
+				<?php submit_button( '保存する' ); ?>
+			</form>
+		</div>
+		<?php
+	}
+
+	// ----------------------------------------------------------------
+	// ページ: エラーログ
+	// ----------------------------------------------------------------
+	public static function page_error_log(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+
+		$entries = AffiKeep_Logger::get_all();
+		?>
+		<div class="wrap affikeep-wrap">
+			<h1>AffiKeep エラーログ</h1>
+
+			<p>ここにプラグインが記録したエラー・警告が表示されます。<br>
+			エラーが出たら、このページの内容をコピーしてサポートに貼り付けてください。</p>
+
+			<div style="margin-bottom: 12px; display:flex; gap:8px; flex-wrap:wrap;">
+				<button id="affikeep-copy-log" class="button button-primary">
+					全ログをコピー
+				</button>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"
+					onsubmit="return confirm('ログを全件削除しますか？');">
+					<input type="hidden" name="action" value="affikeep_clear_log">
+					<?php wp_nonce_field( 'affikeep_clear_log' ); ?>
+					<button type="submit" class="button">ログを消去</button>
+				</form>
+			</div>
+
+			<?php if ( empty( $entries ) ) : ?>
+				<p>ログはありません。</p>
+			<?php else : ?>
+				<div id="affikeep-log-container">
+				<table class="widefat striped">
+					<thead>
+						<tr>
+							<th style="width:160px;">日時</th>
+							<th style="width:60px;">種類</th>
+							<th>メッセージ</th>
+							<th>詳細</th>
+						</tr>
+					</thead>
+					<tbody>
+					<?php foreach ( $entries as $entry ) :
+						$level_class = 'affikeep-level-' . esc_attr( $entry['level'] );
+						$context_str = ! empty( $entry['context'] ) ? json_encode( $entry['context'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT ) : '';
+					?>
+						<tr>
+							<td><?php echo esc_html( $entry['time'] ); ?></td>
+							<td><span class="affikeep-badge <?php echo $level_class; ?>">
+								<?php echo esc_html( strtoupper( $entry['level'] ) ); ?>
+							</span></td>
+							<td><?php echo esc_html( $entry['message'] ); ?></td>
+							<td>
+								<?php if ( $context_str ) : ?>
+									<pre style="font-size:11px;margin:0;white-space:pre-wrap;"><?php echo esc_html( $context_str ); ?></pre>
+								<?php endif; ?>
+							</td>
+						</tr>
+					<?php endforeach; ?>
+					</tbody>
+				</table>
+				</div>
+
+				<script>
+				document.getElementById('affikeep-copy-log').addEventListener('click', function() {
+					var rows = document.querySelectorAll('#affikeep-log-container tbody tr');
+					var lines = ['日時\t種類\tメッセージ\t詳細'];
+					rows.forEach(function(row) {
+						var cells = row.querySelectorAll('td');
+						lines.push([
+							cells[0].textContent.trim(),
+							cells[1].textContent.trim(),
+							cells[2].textContent.trim(),
+							cells[3].textContent.trim().replace(/\s+/g, ' ')
+						].join('\t'));
+					});
+					var text = lines.join('\n');
+					if ( navigator.clipboard ) {
+						navigator.clipboard.writeText(text).then(function() {
+							alert('コピーしました！チャットに貼り付けてください。');
+						});
+					} else {
+						// フォールバック
+						var ta = document.createElement('textarea');
+						ta.value = text;
+						document.body.appendChild(ta);
+						ta.select();
+						document.execCommand('copy');
+						document.body.removeChild(ta);
+						alert('コピーしました！チャットに貼り付けてください。');
+					}
+				});
+				</script>
+			<?php endif; ?>
+		</div>
+		<?php
+	}
+
+	/** ログ消去ハンドラ */
+	public static function handle_clear_log(): void {
+		check_admin_referer( 'affikeep_clear_log' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( '権限がありません' );
+		}
+		AffiKeep_Logger::clear();
+		wp_redirect( admin_url( 'admin.php?page=affikeep-error-log&cleared=1' ) );
+		exit;
+	}
+}

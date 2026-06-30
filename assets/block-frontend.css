@@ -1,0 +1,113 @@
+/* AffiKeep 商品カード */
+
+.affikeep-product-card {
+	border: 1px solid #e0e0e0;
+	border-radius: 8px;
+	overflow: hidden;
+	margin: 1.5em 0;
+	font-family: inherit;
+}
+
+.affikeep-card-dead-notice {
+	background: #fcf0f1;
+	color: #d63638;
+	font-size: 13px;
+	padding: 8px 16px;
+	margin: 0;
+	border-bottom: 1px solid #f5c6c7;
+}
+
+.affikeep-card-inner {
+	display: flex;
+	gap: 16px;
+	padding: 16px;
+	align-items: flex-start;
+	background: #fff;
+}
+
+/* 画像 */
+.affikeep-card-image {
+	flex-shrink: 0;
+	width: 120px;
+}
+
+.affikeep-card-image img {
+	width: 100%;
+	height: auto;
+	display: block;
+	object-fit: contain;
+}
+
+/* テキスト・ボタン */
+.affikeep-card-body {
+	flex: 1;
+	min-width: 0;
+}
+
+.affikeep-card-title {
+	font-size: 15px;
+	font-weight: 600;
+	margin: 0 0 8px;
+	line-height: 1.5;
+	color: #1d2327;
+}
+
+.affikeep-card-price {
+	font-size: 18px;
+	font-weight: 700;
+	color: #c0392b;
+	margin: 0 0 12px;
+}
+
+/* ボタン群 */
+.affikeep-card-buttons {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.affikeep-btn {
+	display: inline-block;
+	padding: 8px 16px;
+	border-radius: 4px;
+	font-size: 14px;
+	font-weight: 600;
+	text-decoration: none;
+	text-align: center;
+	transition: opacity 0.15s;
+}
+
+.affikeep-btn:hover {
+	opacity: 0.85;
+	text-decoration: none;
+}
+
+.affikeep-btn-amazon {
+	background: #ff9900;
+	color: #111;
+}
+
+.affikeep-btn-rakuten {
+	background: #bf0000;
+	color: #fff;
+}
+
+.affikeep-btn-yahoo {
+	background: #ff0033;
+	color: #fff;
+}
+
+/* スマホ対応 */
+@media (max-width: 480px) {
+	.affikeep-card-inner {
+		flex-direction: column;
+	}
+	.affikeep-card-image {
+		width: 100%;
+		max-width: 160px;
+	}
+	.affikeep-btn {
+		flex: 1;
+		min-width: 100px;
+	}
+}
