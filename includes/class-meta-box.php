@@ -169,20 +169,36 @@ class AffiKeep_Meta_Box {
 			return;
 		}
 
-		$text_fields = [
-			'_affikeep_image_url',
-			'_affikeep_price',
+		$url_keys = [
 			'_affikeep_amazon_url',
-			'_affikeep_amazon_asin',
 			'_affikeep_rakuten_url',
 			'_affikeep_yahoo_url',
 		];
+		$text_fields = array_merge( [
+			'_affikeep_image_url',
+			'_affikeep_price',
+			'_affikeep_amazon_asin',
+		], $url_keys );
 
+		$url_changed = false;
 		foreach ( $text_fields as $key ) {
-			$field = str_replace( '_affikeep_', '', $key );
-			if ( isset( $_POST[ $key ] ) ) {
-				update_post_meta( $post_id, $key, sanitize_text_field( $_POST[ $key ] ) );
+			if ( ! isset( $_POST[ $key ] ) ) {
+				continue;
 			}
+			$new_val = sanitize_text_field( $_POST[ $key ] );
+			if ( in_array( $key, $url_keys, true ) ) {
+				$old_val = get_post_meta( $post_id, $key, true );
+				if ( $old_val !== $new_val ) {
+					$url_changed = true;
+				}
+			}
+			update_post_meta( $post_id, $key, $new_val );
+		}
+
+		// URLが変更されたらリンク状態を「未チェック」にリセット
+		if ( $url_changed ) {
+			delete_post_meta( $post_id, '_affikeep_link_status' );
+			delete_post_meta( $post_id, '_affikeep_last_checked' );
 		}
 	}
 }
