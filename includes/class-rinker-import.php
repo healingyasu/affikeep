@@ -347,56 +347,80 @@ class AffiKeep_Rinker_Import {
 	}
 
 	/**
+	 * タイトルが2件以上重複しているAffiKeep商品グループを返す。
+	 * [ post_title => [ id1, id2, ... ] ]（idは昇順、count>=2のもののみ）
+	 *
+	 * 重要: _affikeep_rinker_source_id を持っているかどうかでは判定しない。
+	 * resync()が正規の単一商品にもsource_idを後付けするため、
+	 * 「source_idの有無」はもはや重複の証拠にならない（2026-07-03に判明）。
+	 * 純粋にタイトルの重複件数だけを見る。
+	 */
+	private static function find_duplicate_title_groups(): array {
+		global $wpdb;
+		$rows = $wpdb->get_results( $wpdb->prepare(
+			"SELECT post_title, GROUP_CONCAT(ID ORDER BY ID) as ids
+			 FROM {$wpdb->posts}
+			 WHERE post_type = %s AND post_status = 'publish'
+			 GROUP BY post_title
+			 HAVING COUNT(*) > 1",
+			AffiKeep_Post_Type::CPT
+		) );
+
+		$groups = [];
+		foreach ( $rows as $row ) {
+			$ids = array_map( 'intval', explode( ',', $row->ids ) );
+			$groups[ $row->post_title ] = $ids;
+		}
+		return $groups;
+	}
+
+	/**
 	 * 重複商品クリーンアップ
-	 * _affikeep_rinker_source_id メタを持つ商品（2回目インポートで作られた側）を削除し、
-	 * 元の商品にソースIDを付与する
+	 * タイトルが完全一致する商品が2件以上ある場合のみ、1件を残して残りを削除する。
+	 * 残す1件は「_affikeep_rinker_source_idを持つもの」を優先（値が入っている確率が高いため）。
+	 * source_idが無い側が消える場合、残す側にsource_idを引き継ぐ。
+	 * タイトルが1件しかない商品は、source_idの有無にかかわらず絶対に削除しない。
 	 */
 	public static function cleanup_duplicates(): array {
-		global $wpdb;
+		$groups = self::find_duplicate_title_groups();
 
-		// source_idメタ付きの商品ID（新しく作られた重複側）
-		$dup_ids = $wpdb->get_results(
-			"SELECT post_id, meta_value as rinker_id FROM {$wpdb->postmeta}
-			 WHERE meta_key = '_affikeep_rinker_source_id'"
-		);
-
-		if ( empty( $dup_ids ) ) {
+		if ( empty( $groups ) ) {
 			return [ 'deleted' => 0, 'backfilled' => 0 ];
 		}
 
-		// タイトルで元の商品IDを探してソースIDを付与する
+		$deleted    = 0;
 		$backfilled = 0;
-		foreach ( $dup_ids as $row ) {
-			$dup_post = get_post( intval( $row->post_id ) );
-			if ( ! $dup_post ) continue;
 
-			// 同タイトルでソースIDなしの商品を探す（元の商品）
-			$original = $wpdb->get_var( $wpdb->prepare(
-				"SELECT p.ID FROM {$wpdb->posts} p
-				 LEFT JOIN {$wpdb->postmeta} pm
-				   ON pm.post_id = p.ID AND pm.meta_key = '_affikeep_rinker_source_id'
-				 WHERE p.post_type = %s
-				   AND p.post_status = 'publish'
-				   AND p.post_title = %s
-				   AND pm.meta_value IS NULL
-				 LIMIT 1",
-				AffiKeep_Post_Type::CPT,
-				$dup_post->post_title
-			) );
-
-			if ( $original ) {
-				update_post_meta( intval( $original ), '_affikeep_rinker_source_id', intval( $row->rinker_id ) );
-				$backfilled++;
+		foreach ( $groups as $title => $ids ) {
+			// source_idを持つものを優先して残す。無ければ最も古い(ID最小)ものを残す。
+			$with_source = null;
+			foreach ( $ids as $id ) {
+				if ( get_post_meta( $id, '_affikeep_rinker_source_id', true ) ) {
+					$with_source = $id;
+					break;
+				}
 			}
-		}
+			$keep = $with_source ?? $ids[0];
 
-		// 重複側を削除
-		$deleted = 0;
-		foreach ( $dup_ids as $row ) {
-			$id = intval( $row->post_id );
-			if ( $id > 0 && get_post_type( $id ) === AffiKeep_Post_Type::CPT ) {
-				wp_delete_post( $id, true );
-				$deleted++;
+			// 削除予定のものの中にsource_idを持つものがあれば、残す側に引き継ぐ
+			if ( ! get_post_meta( $keep, '_affikeep_rinker_source_id', true ) ) {
+				foreach ( $ids as $id ) {
+					if ( $id === $keep ) continue;
+					$src = get_post_meta( $id, '_affikeep_rinker_source_id', true );
+					if ( $src ) {
+						update_post_meta( $keep, '_affikeep_rinker_source_id', $src );
+						$backfilled++;
+						break;
+					}
+				}
+			}
+
+			foreach ( $ids as $id ) {
+				if ( $id === $keep ) continue;
+				if ( get_post_type( $id ) === AffiKeep_Post_Type::CPT ) {
+					wp_delete_post( $id, true );
+					$deleted++;
+				}
 			}
 		}
 
@@ -434,13 +458,14 @@ class AffiKeep_Rinker_Import {
 		exit;
 	}
 
-	/** _affikeep_rinker_source_idメタを持つ商品数（重複検出） */
+	/** タイトルが重複している商品の「余分な」件数（＝削除される予定の件数） */
 	private static function count_duplicates(): int {
-		global $wpdb;
-		return (int) $wpdb->get_var(
-			"SELECT COUNT(DISTINCT post_id) FROM {$wpdb->postmeta}
-			 WHERE meta_key = '_affikeep_rinker_source_id'"
-		);
+		$groups = self::find_duplicate_title_groups();
+		$extra  = 0;
+		foreach ( $groups as $ids ) {
+			$extra += count( $ids ) - 1; // 1件は残すので、それ以外が「重複」
+		}
+		return $extra;
 	}
 
 	/** インポートページの描画 */
@@ -496,8 +521,8 @@ class AffiKeep_Rinker_Import {
 			<div class="affikeep-import-card" style="border-color:#d63638;">
 				<h2 style="color:#d63638;">重複商品のクリーンアップ</h2>
 				<p>
-					インポートが2回実行されたため、<strong><?php echo $dup_count; ?>件</strong>の重複商品があります。<br>
-					このボタンを押すと2回目に作られた重複を削除し、元の商品にRinkerとの対応関係を付与します。
+					商品名が完全に一致する商品が複数登録されており、余分な<strong><?php echo $dup_count; ?>件</strong>があります。<br>
+					このボタンを押すと同名グループごとに1件だけ残し、残りを削除します（Rinkerとの対応関係は残す側に引き継ぎます）。
 				</p>
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"
 					onsubmit="return confirm('重複商品 <?php echo $dup_count; ?>件 を削除して修復しますか？');">
