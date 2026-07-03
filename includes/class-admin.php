@@ -193,6 +193,7 @@ class AffiKeep_Admin {
 			: [ 'relation' => 'OR',
 				[ 'key' => '_affikeep_link_status', 'value' => 'dead' ],
 				[ 'key' => '_affikeep_link_status', 'value' => 'unknown' ],
+				[ 'key' => '_affikeep_link_status', 'compare' => 'NOT EXISTS' ],
 			];
 
 		$problem = new WP_Query( [
