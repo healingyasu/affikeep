@@ -6,7 +6,8 @@ class AffiKeep_Admin {
 	public static function init(): void {
 		add_action( 'admin_menu',             [ __CLASS__, 'add_menus' ] );
 		add_action( 'admin_enqueue_scripts',  [ __CLASS__, 'enqueue_assets' ] );
-		add_action( 'admin_post_affikeep_clear_log', [ __CLASS__, 'handle_clear_log' ] );
+		add_action( 'admin_post_affikeep_clear_log',   [ __CLASS__, 'handle_clear_log' ] );
+		add_action( 'admin_post_affikeep_bulk_delete', [ __CLASS__, 'handle_bulk_delete' ] );
 		add_action( 'wp_ajax_affikeep_get_product_articles', [ __CLASS__, 'ajax_get_product_articles' ] );
 		add_action( 'wp_ajax_affikeep_hide_in_article',      [ __CLASS__, 'ajax_hide_in_article' ] );
 		add_action( 'wp_ajax_affikeep_delete_from_article',  [ __CLASS__, 'ajax_delete_from_article' ] );
@@ -180,30 +181,38 @@ class AffiKeep_Admin {
 			return;
 		}
 
-		$counts      = AffiKeep_Link_Checker::count_by_status();
-		$filter      = isset( $_GET['filter'] ) && $_GET['filter'] === 'dead' ? 'dead' : 'all';
-		$paged       = max( 1, intval( $_GET['paged'] ?? 1 ) );
-		$per_page    = 20;
-		$base_url    = admin_url( 'admin.php?page=affikeep-links' );
+		$counts       = AffiKeep_Link_Checker::count_by_status();
+		$filter       = isset( $_GET['filter'] ) && in_array( $_GET['filter'], [ 'dead', 'unused' ], true )
+		                ? $_GET['filter'] : 'all';
+		$paged        = max( 1, intval( $_GET['paged'] ?? 1 ) );
+		$per_page     = 20;
+		$base_url     = admin_url( 'admin.php?page=affikeep-links' );
 		$just_checked = isset( $_GET['checked'] );
+		$just_deleted = isset( $_GET['deleted'] );
+		$unused_ids   = self::get_unused_product_ids();
+		$unused_count = count( $unused_ids );
 
-		// フィルターに応じたmeta_query
-		$meta_query = $filter === 'dead'
-			? [ [ 'key' => '_affikeep_link_status', 'value' => 'dead' ] ]
-			: [ 'relation' => 'OR',
-				[ 'key' => '_affikeep_link_status', 'value' => 'dead' ],
-				[ 'key' => '_affikeep_link_status', 'value' => 'unknown' ],
-				[ 'key' => '_affikeep_link_status', 'compare' => 'NOT EXISTS' ],
-			];
-
-		$problem = new WP_Query( [
+		// クエリ構築
+		$query_args = [
 			'post_type'      => AffiKeep_Post_Type::CPT,
 			'post_status'    => 'publish',
 			'posts_per_page' => $per_page,
 			'paged'          => $paged,
-			'meta_query'     => $meta_query,
-		] );
+		];
+		if ( $filter === 'dead' ) {
+			$query_args['meta_query'] = [ [ 'key' => '_affikeep_link_status', 'value' => 'dead' ] ];
+		} elseif ( $filter === 'unused' ) {
+			$query_args['post__in'] = empty( $unused_ids ) ? [ 0 ] : $unused_ids;
+		} else {
+			$query_args['meta_query'] = [
+				'relation' => 'OR',
+				[ 'key' => '_affikeep_link_status', 'value' => 'dead' ],
+				[ 'key' => '_affikeep_link_status', 'value' => 'unknown' ],
+				[ 'key' => '_affikeep_link_status', 'compare' => 'NOT EXISTS' ],
+			];
+		}
 
+		$problem     = new WP_Query( $query_args );
 		$total       = $problem->found_posts;
 		$total_pages = $problem->max_num_pages;
 		?>
@@ -214,6 +223,11 @@ class AffiKeep_Admin {
 				<div class="notice notice-success is-dismissible" style="padding:12px 16px;">
 					<strong><?php echo intval( $_GET['checked'] ); ?>件</strong>をチェックしました。
 					うち <strong><?php echo intval( $_GET['dead'] ); ?>件</strong> がリンク切れです。
+				</div>
+			<?php endif; ?>
+			<?php if ( $just_deleted ) : ?>
+				<div class="notice notice-success is-dismissible" style="padding:12px 16px;">
+					<strong><?php echo intval( $_GET['deleted'] ); ?>件</strong>の商品を削除しました。
 				</div>
 			<?php endif; ?>
 
@@ -244,70 +258,121 @@ class AffiKeep_Admin {
 				<span style="color:#787c82;font-size:12px;">未チェックの古い順に<?php echo AffiKeep_Link_Checker::BATCH; ?>件ずつ処理します</span>
 			</div>
 
-			<?php /* フィルタータブ */ ?>
-			<div style="margin-bottom:12px;">
+			<?php /* フィルタータブ + 未使用一括削除 */ ?>
+			<div style="margin-bottom:12px;display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
 				<a href="<?php echo esc_url( $base_url ); ?>"
 					class="button <?php echo $filter === 'all' ? 'button-primary' : ''; ?>">
 					全て（<?php echo $counts['dead'] + $counts['unknown']; ?>件）
 				</a>
 				<a href="<?php echo esc_url( $base_url . '&filter=dead' ); ?>"
-					class="button <?php echo $filter === 'dead' ? 'button-primary' : ''; ?>"
-					style="margin-left:4px;">
+					class="button <?php echo $filter === 'dead' ? 'button-primary' : ''; ?>">
 					リンク切れのみ（<?php echo $counts['dead']; ?>件）
 				</a>
+				<a href="<?php echo esc_url( $base_url . '&filter=unused' ); ?>"
+					class="button <?php echo $filter === 'unused' ? 'button-primary' : ''; ?>">
+					未使用（記事なし）（<?php echo $unused_count; ?>件）
+				</a>
+				<?php if ( $filter === 'unused' && $unused_count > 0 ) : ?>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"
+					style="margin-left:12px;"
+					onsubmit="return confirm('記事に使われていない <?php echo $unused_count; ?> 件の商品を全て削除しますか？\nこの操作は元に戻せません。')">
+					<input type="hidden" name="action"            value="affikeep_bulk_delete">
+					<input type="hidden" name="filter"            value="unused">
+					<input type="hidden" name="delete_all_unused" value="1">
+					<?php wp_nonce_field( 'affikeep_bulk_delete' ); ?>
+					<button type="submit" class="button" style="color:#d63638;border-color:#d63638;">
+						未使用 <?php echo $unused_count; ?>件を全て削除
+					</button>
+				</form>
+				<?php endif; ?>
 			</div>
 
 			<?php if ( ! $problem->have_posts() ) : ?>
-				<p><?php echo $filter === 'dead' ? 'リンク切れの商品はありません。' : 'リンク切れ・要確認の商品はありません。'; ?></p>
+				<p><?php
+					if ( $filter === 'dead' )   echo 'リンク切れの商品はありません。';
+					elseif ( $filter === 'unused' ) echo '記事に使われていない商品はありません。';
+					else echo 'リンク切れ・要確認の商品はありません。';
+				?></p>
 			<?php else : ?>
-				<p style="color:#787c82;font-size:12px;margin-bottom:8px;">
-					<?php echo $total; ?>件中 <?php echo ( ( $paged - 1 ) * $per_page + 1 ); ?>〜<?php echo min( $paged * $per_page, $total ); ?>件を表示
-				</p>
-				<table class="widefat striped">
-					<thead><tr>
-						<th>商品名</th>
-						<th style="width:80px;">楽天</th>
-						<th style="width:80px;">Yahoo</th>
-						<th style="width:160px;">最終チェック</th>
-						<th style="width:80px;">編集</th>
-					</tr></thead>
-					<tbody>
-					<?php while ( $problem->have_posts() ) :
-						$problem->the_post();
-						$id             = get_the_ID();
-						$last           = get_post_meta( $id, '_affikeep_last_checked', true );
-						$rakuten_status = get_post_meta( $id, '_affikeep_rakuten_status', true ) ?: '';
-						$yahoo_status   = get_post_meta( $id, '_affikeep_yahoo_status',   true ) ?: '';
-						$rakuten_url    = get_post_meta( $id, '_affikeep_rakuten_url', true );
-						$yahoo_url      = get_post_meta( $id, '_affikeep_yahoo_url',   true );
-					?>
-						<tr>
-							<td><?php echo esc_html( get_the_title() ); ?></td>
-							<td><?php echo self::mall_badge( $rakuten_status, ! empty( $rakuten_url ) ); ?></td>
-							<td><?php echo self::mall_badge( $yahoo_status,   ! empty( $yahoo_url ) ); ?></td>
-							<td><?php echo esc_html( $last ?: '未チェック' ); ?></td>
-							<td><a href="<?php echo esc_url( get_edit_post_link( $id ) ); ?>">編集</a></td>
-						</tr>
-					<?php endwhile; wp_reset_postdata(); ?>
-					</tbody>
-				</table>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+					<input type="hidden" name="action" value="affikeep_bulk_delete">
+					<input type="hidden" name="filter" value="<?php echo esc_attr( $filter ); ?>">
+					<?php wp_nonce_field( 'affikeep_bulk_delete' ); ?>
 
-				<?php if ( $total_pages > 1 ) :
-					$paginate_base = $base_url . ( $filter === 'dead' ? '&filter=dead' : '' ) . '&paged=%#%';
-				?>
-				<div style="margin-top:16px;">
-					<?php echo paginate_links( [
-						'base'      => $paginate_base,
-						'format'    => '',
-						'current'   => $paged,
-						'total'     => $total_pages,
-						'prev_text' => '&laquo; 前',
-						'next_text' => '次 &raquo;',
-					] ); ?>
-				</div>
-				<?php endif; ?>
+					<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+						<p style="color:#787c82;font-size:12px;margin:0;">
+							<?php echo $total; ?>件中 <?php echo ( ( $paged - 1 ) * $per_page + 1 ); ?>〜<?php echo min( $paged * $per_page, $total ); ?>件を表示
+						</p>
+						<button type="submit" class="button button-secondary"
+							onclick="return confirm('選択した商品を削除しますか？\nこの操作は元に戻せません。')">
+							選択した商品を削除
+						</button>
+					</div>
+
+					<table class="widefat striped">
+						<thead><tr>
+							<th style="width:32px;"><input type="checkbox" id="affikeep-select-all" title="全選択"></th>
+							<th>商品名</th>
+							<th style="width:80px;">楽天</th>
+							<th style="width:80px;">Yahoo</th>
+							<th style="width:160px;">最終チェック</th>
+							<th style="width:60px;">編集</th>
+						</tr></thead>
+						<tbody>
+						<?php while ( $problem->have_posts() ) :
+							$problem->the_post();
+							$id             = get_the_ID();
+							$last           = get_post_meta( $id, '_affikeep_last_checked', true );
+							$rakuten_status = get_post_meta( $id, '_affikeep_rakuten_status', true ) ?: '';
+							$yahoo_status   = get_post_meta( $id, '_affikeep_yahoo_status',   true ) ?: '';
+							$rakuten_url    = get_post_meta( $id, '_affikeep_rakuten_url', true );
+							$yahoo_url      = get_post_meta( $id, '_affikeep_yahoo_url',   true );
+						?>
+							<tr>
+								<td><input type="checkbox" name="product_ids[]" value="<?php echo esc_attr( $id ); ?>"></td>
+								<td><?php echo esc_html( get_the_title() ); ?></td>
+								<td><?php echo self::mall_badge( $rakuten_status, ! empty( $rakuten_url ) ); ?></td>
+								<td><?php echo self::mall_badge( $yahoo_status,   ! empty( $yahoo_url ) ); ?></td>
+								<td><?php echo esc_html( $last ?: '未チェック' ); ?></td>
+								<td><a href="<?php echo esc_url( get_edit_post_link( $id ) ); ?>">編集</a></td>
+							</tr>
+						<?php endwhile; wp_reset_postdata(); ?>
+						</tbody>
+					</table>
+
+					<div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;">
+						<?php if ( $total_pages > 1 ) :
+							$paginate_base = $base_url . ( $filter !== 'all' ? '&filter=' . $filter : '' ) . '&paged=%#%';
+							echo paginate_links( [
+								'base'      => $paginate_base,
+								'format'    => '',
+								'current'   => $paged,
+								'total'     => $total_pages,
+								'prev_text' => '&laquo; 前',
+								'next_text' => '次 &raquo;',
+							] );
+						else: ?>
+							<span></span>
+						<?php endif; ?>
+						<button type="submit" class="button button-secondary"
+							onclick="return confirm('選択した商品を削除しますか？\nこの操作は元に戻せません。')">
+							選択した商品を削除
+						</button>
+					</div>
+				</form>
 			<?php endif; ?>
 		</div>
+		<script>
+		(function(){
+			var all = document.getElementById('affikeep-select-all');
+			if (!all) return;
+			all.addEventListener('change', function(){
+				document.querySelectorAll('input[name="product_ids[]"]').forEach(function(cb){
+					cb.checked = all.checked;
+				});
+			});
+		})();
+		</script>
 		<?php
 	}
 
@@ -761,6 +826,59 @@ class AffiKeep_Admin {
 			];
 		}
 		return $result;
+	}
+
+	/** 商品一括削除ハンドラ */
+	public static function handle_bulk_delete(): void {
+		check_admin_referer( 'affikeep_bulk_delete' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( '権限がありません' );
+		}
+
+		if ( ! empty( $_POST['delete_all_unused'] ) ) {
+			$ids = self::get_unused_product_ids();
+		} else {
+			$ids = array_map( 'intval', (array) ( $_POST['product_ids'] ?? [] ) );
+		}
+
+		$deleted = 0;
+		foreach ( $ids as $id ) {
+			if ( $id > 0 && get_post_type( $id ) === AffiKeep_Post_Type::CPT ) {
+				wp_delete_post( $id, true );
+				$deleted++;
+			}
+		}
+
+		$filter   = sanitize_key( $_POST['filter'] ?? 'all' );
+		wp_redirect( admin_url( 'admin.php?page=affikeep-links&deleted=' . $deleted . '&filter=' . $filter ) );
+		exit;
+	}
+
+	/** 記事に使われていない商品IDの配列を返す */
+	private static function get_unused_product_ids(): array {
+		global $wpdb;
+
+		$contents = $wpdb->get_col(
+			"SELECT post_content FROM {$wpdb->posts}
+			 WHERE post_content LIKE '%wp:affikeep/product%'
+			 AND post_status NOT IN ('trash','auto-draft')"
+		);
+
+		$used = [];
+		foreach ( $contents as $c ) {
+			preg_match_all( '/"product_id"\s*:\s*(\d+)/', $c, $m );
+			foreach ( $m[1] as $pid ) {
+				$used[] = intval( $pid );
+			}
+		}
+		$used = array_unique( $used );
+
+		$all = array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare(
+			"SELECT ID FROM {$wpdb->posts} WHERE post_type = %s AND post_status = 'publish'",
+			AffiKeep_Post_Type::CPT
+		) ) );
+
+		return array_values( array_diff( $all, $used ) );
 	}
 
 	/** ログ消去ハンドラ */
