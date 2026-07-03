@@ -247,15 +247,31 @@ class AffiKeep_Admin {
 				</div>
 			</div>
 
-			<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+			<?php
+			$total_products = $counts['ok'] + $counts['dead'] + $counts['unknown'];
+			$auto_nonce     = wp_create_nonce( 'affikeep_auto_check' );
+			?>
+			<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 					<input type="hidden" name="action" value="affikeep_check_now">
 					<?php wp_nonce_field( 'affikeep_check_now' ); ?>
-					<button type="submit" class="button button-primary">
-						今すぐチェック（最大<?php echo AffiKeep_Link_Checker::BATCH; ?>件）
+					<button type="submit" class="button">
+						20件だけチェック
 					</button>
 				</form>
-				<span style="color:#787c82;font-size:12px;">未チェックの古い順に<?php echo AffiKeep_Link_Checker::BATCH; ?>件ずつ処理します</span>
+				<button id="affikeep-auto-btn" class="button button-primary">
+					全件自動チェック（<?php echo $total_products; ?>件）
+				</button>
+				<button id="affikeep-auto-stop" class="button" style="display:none;">停止</button>
+				<span id="affikeep-auto-hint" style="color:#787c82;font-size:12px;">
+					20件ずつ自動で処理します（約<?php echo ceil( $total_products / AffiKeep_Link_Checker::BATCH ); ?>バッチ）
+				</span>
+			</div>
+			<div id="affikeep-progress-wrap" style="display:none;margin-bottom:16px;max-width:600px;">
+				<div style="background:#e0e0e0;border-radius:4px;height:10px;overflow:hidden;">
+					<div id="affikeep-progress-bar" style="background:#135e96;height:100%;width:0%;transition:width 0.3s;"></div>
+				</div>
+				<p id="affikeep-progress-text" style="margin:6px 0 0;font-size:12px;color:#787c82;"></p>
 			</div>
 
 			<?php /* フィルタータブ + 未使用一括削除 */ ?>
@@ -365,13 +381,84 @@ class AffiKeep_Admin {
 		<script>
 		(function(){
 			var all = document.getElementById('affikeep-select-all');
-			if (!all) return;
-			all.addEventListener('change', function(){
-				document.querySelectorAll('input[name="product_ids[]"]').forEach(function(cb){
-					cb.checked = all.checked;
+			if (all) {
+				all.addEventListener('change', function(){
+					document.querySelectorAll('input[name="product_ids[]"]').forEach(function(cb){
+						cb.checked = all.checked;
+					});
 				});
-			});
+			}
 		})();
+
+		(function($){
+			var total    = <?php echo intval( $total_products ); ?>;
+			var nonce    = '<?php echo esc_js( $auto_nonce ); ?>';
+			var running  = false;
+			var done     = 0;
+			var deadTotal = 0;
+
+			$('#affikeep-auto-btn').on('click', function(){
+				running = true; done = 0; deadTotal = 0;
+				$(this).prop('disabled', true).text('チェック中...');
+				$('#affikeep-auto-stop').show();
+				$('#affikeep-auto-hint').hide();
+				$('#affikeep-progress-wrap').show();
+				setProgress(0, '準備中...', '#135e96');
+				tick();
+			});
+
+			$('#affikeep-auto-stop').on('click', function(){
+				running = false;
+				$(this).hide();
+				resetBtn();
+				setProgress(done, '停止しました（' + done + '件チェック済み、リンク切れ: ' + deadTotal + '件）', '#787c82');
+			});
+
+			function tick(){
+				if(!running){ return; }
+				if(done >= total){ finish(); return; }
+				$.ajax({
+					url: ajaxurl, method: 'POST', timeout: 90000,
+					data: { action: 'affikeep_auto_check', nonce: nonce },
+					success: function(r){
+						if(!running) return;
+						if(r.success){
+							done += r.data.checked;
+							deadTotal = r.data.dead_total;
+							setProgress(done, done + ' / ' + total + '件チェック済み（リンク切れ: ' + deadTotal + '件）', '#135e96');
+							if(r.data.checked === 0 || done >= total){ finish(); return; }
+							setTimeout(tick, 500);
+						} else {
+							setProgress(done, 'エラー: ' + r.data, '#d63638');
+							running = false; resetBtn();
+						}
+					},
+					error: function(){
+						setProgress(done, '通信エラー。ページを再読込して再試行してください。', '#d63638');
+						running = false; resetBtn();
+					}
+				});
+			}
+
+			function finish(){
+				running = false;
+				$('#affikeep-auto-stop').hide();
+				resetBtn();
+				setProgress(done, '完了！全 ' + total + '件チェック済み（リンク切れ: ' + deadTotal + '件）', '#00a32a');
+			}
+
+			function resetBtn(){
+				$('#affikeep-auto-btn').prop('disabled', false)
+					.text('全件自動チェック（' + total + '件）');
+				$('#affikeep-auto-hint').show();
+			}
+
+			function setProgress(count, text, color){
+				var pct = total > 0 ? Math.min(100, Math.round(count / total * 100)) : 100;
+				$('#affikeep-progress-bar').css({width: pct + '%', background: color});
+				$('#affikeep-progress-text').text(text);
+			}
+		})(jQuery);
 		</script>
 		<?php
 	}

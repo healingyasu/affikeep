@@ -7,8 +7,9 @@ class AffiKeep_Link_Checker {
 	const BATCH     = 20; // 1回のCronでチェックする最大件数
 
 	public static function init(): void {
-		add_action( self::CRON_HOOK, [ __CLASS__, 'run_batch' ] );
-		add_action( 'admin_post_affikeep_check_now', [ __CLASS__, 'handle_check_now' ] );
+		add_action( self::CRON_HOOK,                   [ __CLASS__, 'run_batch' ] );
+		add_action( 'admin_post_affikeep_check_now',   [ __CLASS__, 'handle_check_now' ] );
+		add_action( 'wp_ajax_affikeep_auto_check',     [ __CLASS__, 'ajax_auto_check' ] );
 	}
 
 	/** 有効化時にCronをスケジュール */
@@ -319,6 +320,21 @@ class AffiKeep_Link_Checker {
 			$counts[ $s ]++;
 		}
 		return $counts;
+	}
+
+	/** 全件自動チェック用AJAXハンドラ（1バッチ実行してJSONを返す） */
+	public static function ajax_auto_check(): void {
+		check_ajax_referer( 'affikeep_auto_check', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( '権限がありません' );
+		}
+		@set_time_limit( 120 );
+		$result = self::run_batch();
+		wp_send_json_success( [
+			'checked'    => $result['checked'],
+			'dead'       => $result['dead'],
+			'dead_total' => self::count_dead(),
+		] );
 	}
 
 	/** 「今すぐチェック」ボタンのハンドラ */
