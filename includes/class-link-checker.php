@@ -8,9 +8,10 @@ class AffiKeep_Link_Checker {
 	const AJAX_BATCH  = 5;  // AJAX自動チェック1回の件数（タイムアウト回避）
 
 	public static function init(): void {
-		add_action( self::CRON_HOOK,                   [ __CLASS__, 'run_batch' ] );
-		add_action( 'admin_post_affikeep_check_now',   [ __CLASS__, 'handle_check_now' ] );
-		add_action( 'wp_ajax_affikeep_auto_check',     [ __CLASS__, 'ajax_auto_check' ] );
+		add_action( self::CRON_HOOK,                     [ __CLASS__, 'run_batch' ] );
+		add_action( 'admin_post_affikeep_check_now',     [ __CLASS__, 'handle_check_now' ] );
+		add_action( 'wp_ajax_affikeep_auto_check',       [ __CLASS__, 'ajax_auto_check' ] );
+		add_action( 'wp_ajax_affikeep_recalc_statuses',  [ __CLASS__, 'ajax_recalculate' ] );
 	}
 
 	/** 有効化時にCronをスケジュール */
@@ -118,14 +119,15 @@ class AffiKeep_Link_Checker {
 		}
 
 		// 総合判定：楽天・Yahoo のみで判定（Amazon除外）
-		if ( in_array( 'dead', $non_amazon, true ) ) {
-			$overall = 'dead';
-		} elseif ( empty( $non_amazon ) ) {
+		// ok = 1つでも正常、dead = 全モール切れ、unknown = それ以外
+		if ( empty( $non_amazon ) ) {
 			$overall = 'unknown'; // 楽天・Yahoo のURLがない（Amazonのみ）
+		} elseif ( in_array( 'ok', $non_amazon, true ) ) {
+			$overall = 'ok'; // 1つでも正常なら正常
 		} elseif ( in_array( 'unknown', $non_amazon, true ) ) {
-			$overall = 'unknown';
+			$overall = 'unknown'; // 不明が混じる場合は保留
 		} else {
-			$overall = 'ok';
+			$overall = 'dead'; // 全モール切れのときだけリンク切れ
 		}
 
 		update_post_meta( $post_id, '_affikeep_link_status', $overall );
@@ -205,6 +207,58 @@ class AffiKeep_Link_Checker {
 		// その他のコードは判断保留
 		self::log_check( $mall, $url, $code, 'unknown', 'HTTPステータス ' . $code );
 		return 'unknown';
+	}
+
+	/**
+	 * 既存のモール別ステータスメタから総合ステータスを再計算する（URL再確認なし）
+	 * ロジック変更後に既存データを即座に修正するために使う
+	 */
+	public static function recalculate_all_statuses(): int {
+		$posts = get_posts( [
+			'post_type'      => AffiKeep_Post_Type::CPT,
+			'post_status'    => 'publish',
+			'posts_per_page' => -1,
+			'fields'         => 'ids',
+		] );
+
+		$updated = 0;
+		foreach ( $posts as $id ) {
+			$rakuten_url    = get_post_meta( $id, '_affikeep_rakuten_url',    true );
+			$yahoo_url      = get_post_meta( $id, '_affikeep_yahoo_url',      true );
+			$rakuten_status = get_post_meta( $id, '_affikeep_rakuten_status', true );
+			$yahoo_status   = get_post_meta( $id, '_affikeep_yahoo_status',   true );
+
+			$non_amazon = [];
+			if ( $rakuten_url && $rakuten_status ) $non_amazon[] = $rakuten_status;
+			if ( $yahoo_url   && $yahoo_status   ) $non_amazon[] = $yahoo_status;
+
+			if ( empty( $non_amazon ) ) {
+				$overall = 'unknown';
+			} elseif ( in_array( 'ok', $non_amazon, true ) ) {
+				$overall = 'ok';
+			} elseif ( in_array( 'unknown', $non_amazon, true ) ) {
+				$overall = 'unknown';
+			} else {
+				$overall = 'dead';
+			}
+
+			$current = get_post_meta( $id, '_affikeep_link_status', true ) ?: 'unknown';
+			if ( $current !== $overall ) {
+				update_post_meta( $id, '_affikeep_link_status', $overall );
+				$updated++;
+			}
+		}
+		return $updated;
+	}
+
+	/** ステータス再計算AJAXハンドラ */
+	public static function ajax_recalculate(): void {
+		check_ajax_referer( 'affikeep_recalc', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( '権限がありません' );
+		}
+		$updated = self::recalculate_all_statuses();
+		wp_send_json_success( [ 'updated' => $updated ] );
 	}
 
 	/** リンクチェックの判定理由をログに残す（誤検知調査用） */

@@ -231,11 +231,15 @@ class AffiKeep_Admin {
 				</div>
 			<?php endif; ?>
 
+			<?php $recalc_nonce = wp_create_nonce( 'affikeep_recalc' ); ?>
 			<div class="affikeep-cards" style="margin-bottom:20px;">
-				<div class="affikeep-card <?php echo $counts['dead'] > 0 ? 'affikeep-card--alert' : ''; ?>">
-					<h2>リンク切れ</h2>
-					<p class="affikeep-big-num"><?php echo esc_html( $counts['dead'] ); ?></p>
-				</div>
+				<a href="<?php echo esc_url( $base_url . '&filter=dead' ); ?>" style="text-decoration:none;">
+					<div class="affikeep-card <?php echo $counts['dead'] > 0 ? 'affikeep-card--alert' : ''; ?>"
+						style="cursor:pointer;">
+						<h2>リンク切れ <span style="font-size:11px;font-weight:400;">↗ クリックで表示</span></h2>
+						<p class="affikeep-big-num"><?php echo esc_html( $counts['dead'] ); ?></p>
+					</div>
+				</a>
 				<div class="affikeep-card">
 					<h2>要確認</h2>
 					<p class="affikeep-big-num"><?php echo esc_html( $counts['unknown'] ); ?></p>
@@ -245,6 +249,13 @@ class AffiKeep_Admin {
 					<h2>正常</h2>
 					<p class="affikeep-big-num"><?php echo esc_html( $counts['ok'] ); ?></p>
 				</div>
+			</div>
+			<div style="margin-bottom:12px;">
+				<button id="affikeep-recalc-btn" class="button"
+					data-nonce="<?php echo esc_attr( $recalc_nonce ); ?>">
+					ステータス再計算（URLを叩かず即時更新）
+				</button>
+				<span id="affikeep-recalc-result" style="margin-left:8px;font-size:12px;color:#787c82;"></span>
 			</div>
 
 			<?php
@@ -379,6 +390,26 @@ class AffiKeep_Admin {
 			<?php endif; ?>
 		</div>
 		<script>
+		(function($){
+			var btn = $('#affikeep-recalc-btn');
+			if (btn.length) {
+				btn.on('click', function(){
+					btn.prop('disabled', true).text('再計算中...');
+					$.post(ajaxurl, {
+						action: 'affikeep_recalc_statuses',
+						nonce:  btn.data('nonce')
+					}, function(r){
+						if(r.success){
+							$('#affikeep-recalc-result').text( r.data.updated + '件を更新しました。ページを再読み込みしてください。' );
+						} else {
+							$('#affikeep-recalc-result').text('エラー: ' + r.data);
+						}
+						btn.prop('disabled', false).text('ステータス再計算（URLを叩かず即時更新）');
+					});
+				});
+			}
+		})(jQuery);
+
 		(function(){
 			var all = document.getElementById('affikeep-select-all');
 			if (all) {
