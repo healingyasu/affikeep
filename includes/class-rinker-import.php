@@ -6,10 +6,134 @@ class AffiKeep_Rinker_Import {
 	const RINKER_CPT    = 'yyi_rinker';
 	const RINKER_BLOCK  = 'rinkerg/gutenberg-rinker';
 
+	/**
+	 * AffiKeepの取り込み先フィールドごとに、Rinker側で候補となるメタキー名（複数）。
+	 * 上から順に試して、最初に値が見つかったものを採用する。
+	 * yyi_rinker_ 接頭辞付きが本命（design-spec.mdの実画面確認・公開カスタマイズ記事のフック名から推定）。
+	 * それ以外は過去の実装で使われていた／他プラグインでよくある命名の保険。
+	 */
+	const FIELD_CANDIDATES = [
+		'_affikeep_image_url'   => [ 'yyi_rinker_img_s', 'yyi_rinker_img_m', 'yyi_rinker_image_url', 'm_image_url', 's_image_url', 'image_url' ],
+		'_affikeep_price'       => [ 'yyi_rinker_price', 'yyi_rinker_rakuten_price', 'price', 'rakuten_price' ],
+		'_affikeep_amazon_price'=> [ 'yyi_rinker_amazon_price', 'amazon_price' ],
+		'_affikeep_amazon_asin' => [ 'yyi_rinker_asin', 'asin' ],
+		'_affikeep_amazon_url'  => [ 'yyi_rinker_amazon_url', 'amazon_url' ],
+		'_affikeep_rakuten_url' => [ 'yyi_rinker_rakuten_url', 'rakuten_url' ],
+		'_affikeep_yahoo_url'   => [ 'yyi_rinker_yahoo_url', 'yahoo_url' ],
+	];
+
 	public static function init(): void {
 		add_action( 'admin_post_affikeep_rinker_import',        [ __CLASS__, 'handle_import' ] );
 		add_action( 'admin_post_affikeep_rinker_convert_only',  [ __CLASS__, 'handle_convert_only' ] );
 		add_action( 'admin_post_affikeep_rinker_cleanup',       [ __CLASS__, 'handle_cleanup' ] );
+		add_action( 'admin_post_affikeep_rinker_diagnose',      [ __CLASS__, 'handle_diagnose' ] );
+		add_action( 'admin_post_affikeep_rinker_resync',        [ __CLASS__, 'handle_resync' ] );
+	}
+
+	/**
+	 * 候補キーの中から最初に見つかった値を返す（$meta は get_post_meta( $id ) の生配列）。
+	 */
+	private static function pick( array $meta, array $candidates ): string {
+		foreach ( $candidates as $key ) {
+			if ( isset( $meta[ $key ][0] ) && $meta[ $key ][0] !== '' ) {
+				return $meta[ $key ][0];
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * 1件のRinker商品の生メタを丸ごとログに出す（キー名確認用・ターミナル不要）。
+	 */
+	public static function diagnose(): array {
+		$rinker_posts = get_posts( [
+			'post_type'      => self::RINKER_CPT,
+			'post_status'    => [ 'publish', 'draft' ],
+			'posts_per_page' => 3,
+			'fields'         => 'ids',
+		] );
+
+		if ( empty( $rinker_posts ) ) {
+			AffiKeep_Logger::warn( 'Rinker診断: Rinker商品が見つかりませんでした。' );
+			return [];
+		}
+
+		$dump = [];
+		foreach ( $rinker_posts as $rinker_id ) {
+			$meta = get_post_meta( $rinker_id );
+			$flat = [];
+			foreach ( $meta as $k => $v ) {
+				$flat[ $k ] = $v[0] ?? '';
+			}
+			$dump[ $rinker_id ] = $flat;
+			AffiKeep_Logger::log(
+				"Rinker診断: post_id={$rinker_id} のメタキー一覧",
+				AffiKeep_Logger::LEVEL_INFO,
+				$flat
+			);
+		}
+
+		return $dump;
+	}
+
+	public static function handle_diagnose(): void {
+		check_admin_referer( 'affikeep_rinker_diagnose' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( '権限がありません' );
+		}
+		self::diagnose();
+		wp_redirect( add_query_arg( [
+			'page'      => 'affikeep-error-log',
+			'diagnosed' => 1,
+		], admin_url( 'admin.php' ) ) );
+		exit;
+	}
+
+	/**
+	 * 既にインポート済みだが空欄になっている商品のフィールドを、
+	 * 現在のFIELD_CANDIDATESマッピングで再取得して埋め直す（新規作成はしない）。
+	 */
+	public static function resync(): int {
+		global $wpdb;
+		$rows = $wpdb->get_results(
+			"SELECT post_id, meta_value as rinker_id FROM {$wpdb->postmeta}
+			 WHERE meta_key = '_affikeep_rinker_source_id'"
+		);
+
+		$updated = 0;
+		foreach ( $rows as $row ) {
+			$affikeep_id = intval( $row->post_id );
+			$rinker_id   = intval( $row->rinker_id );
+			if ( ! $affikeep_id || ! $rinker_id ) continue;
+
+			$meta = get_post_meta( $rinker_id );
+			$any_filled = false;
+
+			foreach ( self::FIELD_CANDIDATES as $target_key => $candidates ) {
+				$value = self::pick( $meta, $candidates );
+				if ( $value !== '' ) {
+					update_post_meta( $affikeep_id, $target_key, $value );
+					$any_filled = true;
+				}
+			}
+
+			if ( $any_filled ) $updated++;
+		}
+
+		return $updated;
+	}
+
+	public static function handle_resync(): void {
+		check_admin_referer( 'affikeep_rinker_resync' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( '権限がありません' );
+		}
+		$updated = self::resync();
+		wp_redirect( add_query_arg( [
+			'page'    => 'affikeep-import',
+			'resynced'=> $updated,
+		], admin_url( 'admin.php' ) ) );
+		exit;
 	}
 
 	/** Rinker商品の件数を返す */
@@ -62,20 +186,20 @@ class AffiKeep_Rinker_Import {
 			// Rinkerソースを記録（重複防止・変換再実行用）
 			update_post_meta( $new_id, '_affikeep_rinker_source_id', $rinker_id );
 
-			$image_url = $meta['m_image_url'][0] ?? $meta['s_image_url'][0] ?? '';
-			$fields = [
-				'_affikeep_image_url'   => $image_url,
-				'_affikeep_price'       => $meta['price'][0]       ?? '',
-				'_affikeep_amazon_asin' => $meta['asin'][0]        ?? '',
-				'_affikeep_amazon_url'  => $meta['amazon_url'][0]  ?? '',
-				'_affikeep_rakuten_url' => $meta['rakuten_url'][0] ?? '',
-				'_affikeep_yahoo_url'   => $meta['yahoo_url'][0]   ?? '',
-			];
-
-			foreach ( $fields as $key => $value ) {
+			$any_filled = false;
+			foreach ( self::FIELD_CANDIDATES as $target_key => $candidates ) {
+				$value = self::pick( $meta, $candidates );
 				if ( $value !== '' ) {
-					update_post_meta( $new_id, $key, $value );
+					update_post_meta( $new_id, $target_key, $value );
+					$any_filled = true;
 				}
+			}
+
+			if ( ! $any_filled ) {
+				AffiKeep_Logger::warn(
+					"Rinkerインポート: post_id={$rinker_id}（{$rinker_post->post_title}）で候補キーが1件もヒットしませんでした。メタキー名が想定と違う可能性があります。",
+					array_map( fn( $v ) => $v[0] ?? '', $meta )
+				);
 			}
 
 			$id_map[ $rinker_id ] = $new_id;
@@ -340,6 +464,13 @@ class AffiKeep_Rinker_Import {
 				</div>
 			<?php endif; ?>
 
+			<?php if ( isset( $_GET['resynced'] ) ) : ?>
+				<div class="notice notice-success is-dismissible" style="padding:12px 16px;">
+					<strong>再同期完了：</strong>
+					商品 <?php echo intval( $_GET['resynced'] ); ?>件 のフィールドを埋め直しました。商品一覧で画像・価格・URLが入っているか確認してください。
+				</div>
+			<?php endif; ?>
+
 			<?php if ( isset( $_GET['cleanup'] ) ) : ?>
 				<div class="notice notice-success is-dismissible" style="padding:12px 16px;">
 					<strong>クリーンアップ完了：</strong>
@@ -401,6 +532,41 @@ class AffiKeep_Rinker_Import {
 					</form>
 				<?php endif; ?>
 			</div>
+
+			<?php /* Rinkerメタキー診断 */ ?>
+			<div class="affikeep-import-card">
+				<h2>Rinkerのメタキーを診断</h2>
+				<p>
+					インポートした商品の画像・価格・URLが空になる場合は、Rinker側のメタキー名が想定と違っている可能性があります。<br>
+					このボタンを押すと、Rinker商品（最大3件）の生データを「エラーログ」画面に出力します（ターミナル不要）。
+				</p>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+					<input type="hidden" name="action" value="affikeep_rinker_diagnose">
+					<?php wp_nonce_field( 'affikeep_rinker_diagnose' ); ?>
+					<button type="submit" class="button button-large">
+						Rinkerのメタキーを診断してログに出力
+					</button>
+				</form>
+			</div>
+
+			<?php /* 既存インポート済みの再同期 */ ?>
+			<?php if ( $mapped > 0 ) : ?>
+			<div class="affikeep-import-card">
+				<h2>インポート済み商品のフィールドを再同期</h2>
+				<p>
+					画像・価格・Amazon/楽天/Yahoo URLが空のまま取り込まれてしまった場合に使います。<br>
+					商品を作り直さず、既にインポート済みの<strong><?php echo $mapped; ?>件</strong>について、最新のマッピングでフィールドだけ埋め直します。
+				</p>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"
+					onsubmit="return confirm('インポート済み商品のフィールドを再取得して埋め直します。続けますか？');">
+					<input type="hidden" name="action" value="affikeep_rinker_resync">
+					<?php wp_nonce_field( 'affikeep_rinker_resync' ); ?>
+					<button type="submit" class="button button-large">
+						フィールドを再同期（<?php echo $mapped; ?>件対応）
+					</button>
+				</form>
+			</div>
+			<?php endif; ?>
 
 			<?php /* ブロック変換のみ再実行 */ ?>
 			<?php if ( $mapped > 0 ) : ?>
