@@ -13,13 +13,16 @@ class AffiKeep_Rinker_Import {
 	 * それ以外は過去の実装で使われていた／他プラグインでよくある命名の保険。
 	 */
 	const FIELD_CANDIDATES = [
-		'_affikeep_image_url'   => [ 'yyi_rinker_img_s', 'yyi_rinker_img_m', 'yyi_rinker_image_url', 'm_image_url', 's_image_url', 'image_url' ],
-		'_affikeep_price'       => [ 'yyi_rinker_price', 'yyi_rinker_rakuten_price', 'price', 'rakuten_price' ],
-		'_affikeep_amazon_price'=> [ 'yyi_rinker_amazon_price', 'amazon_price' ],
-		'_affikeep_amazon_asin' => [ 'yyi_rinker_asin', 'asin' ],
-		'_affikeep_amazon_url'  => [ 'yyi_rinker_amazon_url', 'amazon_url' ],
-		'_affikeep_rakuten_url' => [ 'yyi_rinker_rakuten_url', 'rakuten_url' ],
-		'_affikeep_yahoo_url'   => [ 'yyi_rinker_yahoo_url', 'yahoo_url' ],
+		// 2026-07-03 診断ログ（post_id=16012/16015/16043の実データ）で確認済みの実キー名を最優先にする。
+		'_affikeep_image_url'   => [ 'yyi_rinker_m_image_url', 'yyi_rinker_s_image_url', 'yyi_rinker_l_image_url' ],
+		'_affikeep_price'       => [ 'yyi_rinker_price' ],
+		'_affikeep_amazon_price'=> [ 'yyi_rinker_amazon_price' ],
+		'_affikeep_amazon_asin' => [ 'yyi_rinker_asin' ],
+		// yyi_rinker_amazon_url は商品個別URLではなくAmazon検索結果URL（診断ログで確認済み）。
+		// 商品個別リンクは yyi_rinker_amazon_title_url 側（/dp/ASIN?tag=... 形式）。
+		'_affikeep_amazon_url'  => [ 'yyi_rinker_amazon_title_url' ],
+		'_affikeep_rakuten_url' => [ 'yyi_rinker_rakuten_url' ],
+		'_affikeep_yahoo_url'   => [ 'yyi_rinker_yahoo_url' ],
 	];
 
 	public static function init(): void {
@@ -92,19 +95,20 @@ class AffiKeep_Rinker_Import {
 	/**
 	 * 既にインポート済みだが空欄になっている商品のフィールドを、
 	 * 現在のFIELD_CANDIDATESマッピングで再取得して埋め直す（新規作成はしない）。
+	 * _affikeep_rinker_source_id が付いていない商品（過去のインポートで紐付け情報が
+	 * 残らなかったもの）もタイトル一致で拾えるよう rebuild_id_map() を使う。
 	 */
 	public static function resync(): int {
-		global $wpdb;
-		$rows = $wpdb->get_results(
-			"SELECT post_id, meta_value as rinker_id FROM {$wpdb->postmeta}
-			 WHERE meta_key = '_affikeep_rinker_source_id'"
-		);
+		$id_map = self::rebuild_id_map(); // [rinker_id => affikeep_id]（source_id優先、無ければタイトル一致）
 
 		$updated = 0;
-		foreach ( $rows as $row ) {
-			$affikeep_id = intval( $row->post_id );
-			$rinker_id   = intval( $row->rinker_id );
+		foreach ( $id_map as $rinker_id => $affikeep_id ) {
 			if ( ! $affikeep_id || ! $rinker_id ) continue;
+
+			// タイトル一致で見つかった場合、次回から高速に引けるよう紐付けを保存しておく
+			if ( ! get_post_meta( $affikeep_id, '_affikeep_rinker_source_id', true ) ) {
+				update_post_meta( $affikeep_id, '_affikeep_rinker_source_id', $rinker_id );
+			}
 
 			$meta = get_post_meta( $rinker_id );
 			$any_filled = false;
