@@ -180,10 +180,31 @@ class AffiKeep_Admin {
 			return;
 		}
 
-		$counts = AffiKeep_Link_Checker::count_by_status();
-
-		// チェック直後のメッセージ
+		$counts      = AffiKeep_Link_Checker::count_by_status();
+		$filter      = isset( $_GET['filter'] ) && $_GET['filter'] === 'dead' ? 'dead' : 'all';
+		$paged       = max( 1, intval( $_GET['paged'] ?? 1 ) );
+		$per_page    = 20;
+		$base_url    = admin_url( 'admin.php?page=affikeep-links' );
 		$just_checked = isset( $_GET['checked'] );
+
+		// フィルターに応じたmeta_query
+		$meta_query = $filter === 'dead'
+			? [ [ 'key' => '_affikeep_link_status', 'value' => 'dead' ] ]
+			: [ 'relation' => 'OR',
+				[ 'key' => '_affikeep_link_status', 'value' => 'dead' ],
+				[ 'key' => '_affikeep_link_status', 'value' => 'unknown' ],
+			];
+
+		$problem = new WP_Query( [
+			'post_type'      => AffiKeep_Post_Type::CPT,
+			'post_status'    => 'publish',
+			'posts_per_page' => $per_page,
+			'paged'          => $paged,
+			'meta_query'     => $meta_query,
+		] );
+
+		$total       = $problem->found_posts;
+		$total_pages = $problem->max_num_pages;
 		?>
 		<div class="wrap affikeep-wrap">
 			<h1>リンク切れチェック</h1>
@@ -203,7 +224,7 @@ class AffiKeep_Admin {
 				<div class="affikeep-card">
 					<h2>要確認</h2>
 					<p class="affikeep-big-num"><?php echo esc_html( $counts['unknown'] ); ?></p>
-					<p class="affikeep-note">時間を置いて再確認します</p>
+					<p class="affikeep-note">楽天・Yahoo判定待ち</p>
 				</div>
 				<div class="affikeep-card">
 					<h2>正常</h2>
@@ -211,54 +232,80 @@ class AffiKeep_Admin {
 				</div>
 			</div>
 
-			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin-bottom:20px;">
-				<input type="hidden" name="action" value="affikeep_check_now">
-				<?php wp_nonce_field( 'affikeep_check_now' ); ?>
-				<button type="submit" class="button button-primary">今すぐチェック（最大<?php echo AffiKeep_Link_Checker::BATCH; ?>件）</button>
-				<span class="description" style="margin-left:8px;">商品数が多い場合は、ボタンを複数回押すと古いものから順にチェックされます。</span>
-			</form>
+			<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+					<input type="hidden" name="action" value="affikeep_check_now">
+					<?php wp_nonce_field( 'affikeep_check_now' ); ?>
+					<button type="submit" class="button button-primary">
+						今すぐチェック（最大<?php echo AffiKeep_Link_Checker::BATCH; ?>件）
+					</button>
+				</form>
+				<span style="color:#787c82;font-size:12px;">未チェックの古い順に<?php echo AffiKeep_Link_Checker::BATCH; ?>件ずつ処理します</span>
+			</div>
 
-			<?php
-			// リンク切れ・要確認の商品を一覧
-			$problem = new WP_Query( [
-				'post_type'      => AffiKeep_Post_Type::CPT,
-				'post_status'    => 'publish',
-				'posts_per_page' => -1,
-				'meta_query'     => [
-					'relation' => 'OR',
-					[ 'key' => '_affikeep_link_status', 'value' => 'dead' ],
-					[ 'key' => '_affikeep_link_status', 'value' => 'unknown' ],
-				],
-			] );
+			<?php /* フィルタータブ */ ?>
+			<div style="margin-bottom:12px;">
+				<a href="<?php echo esc_url( $base_url ); ?>"
+					class="button <?php echo $filter === 'all' ? 'button-primary' : ''; ?>">
+					全て（<?php echo $counts['dead'] + $counts['unknown']; ?>件）
+				</a>
+				<a href="<?php echo esc_url( $base_url . '&filter=dead' ); ?>"
+					class="button <?php echo $filter === 'dead' ? 'button-primary' : ''; ?>"
+					style="margin-left:4px;">
+					リンク切れのみ（<?php echo $counts['dead']; ?>件）
+				</a>
+			</div>
 
-			if ( ! $problem->have_posts() ) {
-				echo '<p>リンク切れ・要確認の商品はありません。</p>';
-			} else {
-				echo '<table class="widefat striped"><thead><tr>';
-				echo '<th>商品名</th><th style="width:80px;">楽天</th><th style="width:80px;">Yahoo</th><th style="width:160px;">最終チェック</th><th style="width:80px;">編集</th>';
-				echo '</tr></thead><tbody>';
+			<?php if ( ! $problem->have_posts() ) : ?>
+				<p><?php echo $filter === 'dead' ? 'リンク切れの商品はありません。' : 'リンク切れ・要確認の商品はありません。'; ?></p>
+			<?php else : ?>
+				<p style="color:#787c82;font-size:12px;margin-bottom:8px;">
+					<?php echo $total; ?>件中 <?php echo ( ( $paged - 1 ) * $per_page + 1 ); ?>〜<?php echo min( $paged * $per_page, $total ); ?>件を表示
+				</p>
+				<table class="widefat striped">
+					<thead><tr>
+						<th>商品名</th>
+						<th style="width:80px;">楽天</th>
+						<th style="width:80px;">Yahoo</th>
+						<th style="width:160px;">最終チェック</th>
+						<th style="width:80px;">編集</th>
+					</tr></thead>
+					<tbody>
+					<?php while ( $problem->have_posts() ) :
+						$problem->the_post();
+						$id             = get_the_ID();
+						$last           = get_post_meta( $id, '_affikeep_last_checked', true );
+						$rakuten_status = get_post_meta( $id, '_affikeep_rakuten_status', true ) ?: '';
+						$yahoo_status   = get_post_meta( $id, '_affikeep_yahoo_status',   true ) ?: '';
+						$rakuten_url    = get_post_meta( $id, '_affikeep_rakuten_url', true );
+						$yahoo_url      = get_post_meta( $id, '_affikeep_yahoo_url',   true );
+					?>
+						<tr>
+							<td><?php echo esc_html( get_the_title() ); ?></td>
+							<td><?php echo self::mall_badge( $rakuten_status, ! empty( $rakuten_url ) ); ?></td>
+							<td><?php echo self::mall_badge( $yahoo_status,   ! empty( $yahoo_url ) ); ?></td>
+							<td><?php echo esc_html( $last ?: '未チェック' ); ?></td>
+							<td><a href="<?php echo esc_url( get_edit_post_link( $id ) ); ?>">編集</a></td>
+						</tr>
+					<?php endwhile; wp_reset_postdata(); ?>
+					</tbody>
+				</table>
 
-				while ( $problem->have_posts() ) {
-					$problem->the_post();
-					$id             = get_the_ID();
-					$last           = get_post_meta( $id, '_affikeep_last_checked', true );
-					$rakuten_status = get_post_meta( $id, '_affikeep_rakuten_status', true ) ?: '';
-					$yahoo_status   = get_post_meta( $id, '_affikeep_yahoo_status',   true ) ?: '';
-					$rakuten_url    = get_post_meta( $id, '_affikeep_rakuten_url', true );
-					$yahoo_url      = get_post_meta( $id, '_affikeep_yahoo_url',   true );
-
-					echo '<tr>';
-					echo '<td>' . esc_html( get_the_title() ) . '</td>';
-					echo '<td>' . self::mall_badge( $rakuten_status, ! empty( $rakuten_url ) ) . '</td>';
-					echo '<td>' . self::mall_badge( $yahoo_status,   ! empty( $yahoo_url ) ) . '</td>';
-					echo '<td>' . esc_html( $last ?: '未チェック' ) . '</td>';
-					echo '<td><a href="' . esc_url( get_edit_post_link( $id ) ) . '">編集</a></td>';
-					echo '</tr>';
-				}
-				echo '</tbody></table>';
-				wp_reset_postdata();
-			}
-			?>
+				<?php if ( $total_pages > 1 ) :
+					$paginate_base = $base_url . ( $filter === 'dead' ? '&filter=dead' : '' ) . '&paged=%#%';
+				?>
+				<div style="margin-top:16px;">
+					<?php echo paginate_links( [
+						'base'      => $paginate_base,
+						'format'    => '',
+						'current'   => $paged,
+						'total'     => $total_pages,
+						'prev_text' => '&laquo; 前',
+						'next_text' => '次 &raquo;',
+					] ); ?>
+				</div>
+				<?php endif; ?>
+			<?php endif; ?>
 		</div>
 		<?php
 	}

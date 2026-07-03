@@ -4,10 +4,11 @@ defined( 'ABSPATH' ) || exit;
 // このファイルは class-block.php の render() から呼ばれる
 // 利用可能な変数: $post (WP_Post), $product_id (int)
 
-$title       = get_the_title( $post );
-$image_url   = get_post_meta( $post->ID, '_affikeep_image_url',   true );
-$price       = get_post_meta( $post->ID, '_affikeep_price',       true );
-$amazon_url  = get_post_meta( $post->ID, '_affikeep_amazon_url',  true );
+$title         = get_the_title( $post );
+$image_url     = get_post_meta( $post->ID, '_affikeep_image_url',    true );
+$price         = get_post_meta( $post->ID, '_affikeep_price',        true );
+$amazon_price  = get_post_meta( $post->ID, '_affikeep_amazon_price', true );
+$amazon_url    = get_post_meta( $post->ID, '_affikeep_amazon_url',   true );
 $rakuten_url = get_post_meta( $post->ID, '_affikeep_rakuten_url', true );
 $yahoo_url   = get_post_meta( $post->ID, '_affikeep_yahoo_url',   true );
 $status      = get_post_meta( $post->ID, '_affikeep_link_status', true ) ?: 'unknown';
@@ -43,7 +44,14 @@ $btn_yahoo   = esc_html( $s['button_text_yahoo']   ?: 'Yahoo!で見る' );
 
 			<p class="affikeep-card-title"><?php echo esc_html( $title ); ?></p>
 
-			<?php if ( $price ) : ?>
+			<?php if ( $amazon_price && $price ) : ?>
+				<p class="affikeep-card-price">
+					<span class="affikeep-price-amazon">Amazon <?php echo esc_html( $amazon_price ); ?></span>
+					<span class="affikeep-price-rakuten">楽天 <?php echo esc_html( $price ); ?></span>
+				</p>
+			<?php elseif ( $amazon_price ) : ?>
+				<p class="affikeep-card-price"><?php echo esc_html( $amazon_price ); ?></p>
+			<?php elseif ( $price ) : ?>
 				<p class="affikeep-card-price"><?php echo esc_html( $price ); ?></p>
 			<?php endif; ?>
 

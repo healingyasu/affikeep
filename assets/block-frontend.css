@@ -57,6 +57,40 @@
 	font-weight: 700;
 	color: #c0392b;
 	margin: 0 0 12px;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	align-items: baseline;
+}
+
+.affikeep-price-amazon,
+.affikeep-price-rakuten {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 4px;
+	font-size: 15px;
+}
+
+.affikeep-price-amazon::before {
+	content: '';
+	display: inline-block;
+	width: 14px;
+	height: 14px;
+	background: #ff9900;
+	border-radius: 2px;
+	vertical-align: middle;
+	margin-right: 2px;
+}
+
+.affikeep-price-rakuten::before {
+	content: '';
+	display: inline-block;
+	width: 14px;
+	height: 14px;
+	background: #bf0000;
+	border-radius: 2px;
+	vertical-align: middle;
+	margin-right: 2px;
 }
 
 /* ボタン群 */

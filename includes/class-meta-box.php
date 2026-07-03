@@ -114,11 +114,19 @@ class AffiKeep_Meta_Box {
 				</td>
 			</tr>
 			<tr>
-				<th><label for="ak_price">表示価格</label></th>
+				<th><label for="ak_price">楽天価格</label></th>
 				<td>
 					<input type="text" id="ak_price" name="_affikeep_price"
-						value="<?php echo $get( '_affikeep_price' ); ?>" placeholder="例: 2,980円">
-					<p class="desc">自由形式。「2,980円」「税込3,278円」など</p>
+						value="<?php echo $get( '_affikeep_price' ); ?>" placeholder="例: 3,280円">
+					<p class="desc">楽天APIで自動取得。手動入力も可。</p>
+				</td>
+			</tr>
+			<tr>
+				<th><label for="ak_amazon_price">Amazon価格</label></th>
+				<td>
+					<input type="text" id="ak_amazon_price" name="_affikeep_amazon_price"
+						value="<?php echo $get( '_affikeep_amazon_price' ); ?>" placeholder="例: 2,980円">
+					<p class="desc">手動入力。両方入力するとブロックに2つの価格を表示します。</p>
 				</td>
 			</tr>
 			<tr>
@@ -316,6 +324,7 @@ class AffiKeep_Meta_Box {
 		$text_fields = array_merge( [
 			'_affikeep_image_url',
 			'_affikeep_price',
+			'_affikeep_amazon_price',
 			'_affikeep_amazon_asin',
 		], $url_keys );
 
