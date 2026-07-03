@@ -264,7 +264,7 @@ class AffiKeep_Admin {
 				</button>
 				<button id="affikeep-auto-stop" class="button" style="display:none;">停止</button>
 				<span id="affikeep-auto-hint" style="color:#787c82;font-size:12px;">
-					20件ずつ自動で処理します（約<?php echo ceil( $total_products / AffiKeep_Link_Checker::BATCH ); ?>バッチ）
+					<?php echo AffiKeep_Link_Checker::AJAX_BATCH; ?>件ずつ自動で処理します（約<?php echo ceil( $total_products / AffiKeep_Link_Checker::AJAX_BATCH ); ?>バッチ）
 				</span>
 			</div>
 			<div id="affikeep-progress-wrap" style="display:none;margin-bottom:16px;max-width:600px;">

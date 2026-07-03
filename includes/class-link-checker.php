@@ -3,8 +3,9 @@ defined( 'ABSPATH' ) || exit;
 
 class AffiKeep_Link_Checker {
 
-	const CRON_HOOK = 'affikeep_check_links';
-	const BATCH     = 20; // 1回のCronでチェックする最大件数
+	const CRON_HOOK   = 'affikeep_check_links';
+	const BATCH       = 20; // 1回のCronでチェックする最大件数
+	const AJAX_BATCH  = 5;  // AJAX自動チェック1回の件数（タイムアウト回避）
 
 	public static function init(): void {
 		add_action( self::CRON_HOOK,                   [ __CLASS__, 'run_batch' ] );
@@ -29,15 +30,16 @@ class AffiKeep_Link_Checker {
 
 	/**
 	 * 最終チェックが古い順にBATCH件チェックする（Cron用）。
+	 * @param int $limit 処理件数（省略時はBATCH定数）
 	 * @return array [checked, dead] 件数
 	 */
-	public static function run_batch(): array {
+	public static function run_batch( int $limit = self::BATCH ): array {
 		// 未チェック商品を先に、次に最終チェックが古い順で取得
 		// ※ meta_key と meta_query の同時指定は未チェック商品を除外するためNG
 		$unchecked = new WP_Query( [
 			'post_type'      => AffiKeep_Post_Type::CPT,
 			'post_status'    => 'publish',
-			'posts_per_page' => self::BATCH,
+			'posts_per_page' => $limit,
 			'fields'         => 'ids',
 			'meta_query'     => [
 				[ 'key' => '_affikeep_last_checked', 'compare' => 'NOT EXISTS' ],
@@ -47,7 +49,7 @@ class AffiKeep_Link_Checker {
 		$ids = $unchecked->posts;
 
 		// 足りなければ古い順で補完
-		$remaining = self::BATCH - count( $ids );
+		$remaining = $limit - count( $ids );
 		if ( $remaining > 0 ) {
 			$old = new WP_Query( [
 				'post_type'      => AffiKeep_Post_Type::CPT,
@@ -322,14 +324,14 @@ class AffiKeep_Link_Checker {
 		return $counts;
 	}
 
-	/** 全件自動チェック用AJAXハンドラ（1バッチ実行してJSONを返す） */
+	/** 全件自動チェック用AJAXハンドラ（AJAX_BATCH件だけ実行してJSONを返す） */
 	public static function ajax_auto_check(): void {
 		check_ajax_referer( 'affikeep_auto_check', 'nonce' );
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( '権限がありません' );
 		}
-		@set_time_limit( 120 );
-		$result = self::run_batch();
+		@set_time_limit( 60 );
+		$result = self::run_batch( self::AJAX_BATCH );
 		wp_send_json_success( [
 			'checked'    => $result['checked'],
 			'dead'       => $result['dead'],
