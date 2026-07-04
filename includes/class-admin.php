@@ -218,6 +218,13 @@ class AffiKeep_Admin {
 		?>
 		<div class="wrap affikeep-wrap">
 			<h1>リンク切れチェック</h1>
+			<div class="notice notice-info inline" style="padding:10px 16px;margin-bottom:16px;">
+				<strong>チェック対象：楽天・Yahoo! のみ（Amazon は除外）</strong><br>
+				<span style="font-size:12px;color:#50575e;">
+					Amazon はbot検知のため自動判定できません。楽天・Yahoo! の<strong>両方が切れている</strong>商品を「リンク切れ」として扱います。
+					どちらか一方でも正常であれば読者は商品ページに到達できるため「正常」と表示されます。
+				</span>
+			</div>
 
 			<?php if ( $just_checked ) : ?>
 				<div class="notice notice-success is-dismissible" style="padding:12px 16px;">
