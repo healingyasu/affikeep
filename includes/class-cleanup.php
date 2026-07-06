@@ -13,21 +13,26 @@ class AffiKeep_Cleanup {
 	}
 
 	/**
-	 * 指定年以前に最終更新された、AffiKeepブロックを含む記事を取得
-	 * 「2022年以前」= post_modified が 2023-01-01 より前
+	 * 指定年以前の、AffiKeepブロックを含む記事を取得
+	 * 「2022年以前」= 基準日が 2023-01-01 より前
+	 *
+	 * @param string $basis 'date'=公開日基準 / 'modified'=更新日基準
+	 *   注意: Rinkerからのブロック一括変換を行うと記事の更新日が変換日に
+	 *   書き換わるため、古い記事を狙う場合は公開日基準を推奨。
 	 */
-	public static function find_articles( int $year ): array {
+	public static function find_articles( int $year, string $basis = 'date' ): array {
 		global $wpdb;
 		$cutoff = sprintf( '%d-01-01 00:00:00', $year + 1 );
+		$col    = $basis === 'modified' ? 'post_modified' : 'post_date';
 
 		$rows = $wpdb->get_results( $wpdb->prepare(
-			"SELECT ID, post_title, post_modified, post_content, post_status
+			"SELECT ID, post_title, post_date, post_modified, post_content, post_status
 			 FROM {$wpdb->posts}
 			 WHERE post_type IN ('post','page')
 			 AND post_status NOT IN ('trash','auto-draft','inherit')
 			 AND post_content LIKE '%wp:affikeep/product%'
-			 AND post_modified < %s
-			 ORDER BY post_modified ASC",
+			 AND {$col} < %s
+			 ORDER BY {$col} ASC",
 			$cutoff
 		) );
 
@@ -38,6 +43,7 @@ class AffiKeep_Cleanup {
 				$result[] = [
 					'id'       => (int) $row->ID,
 					'title'    => $row->post_title,
+					'date'     => $row->post_date,
 					'modified' => $row->post_modified,
 					'blocks'   => $count,
 					'status'   => $row->post_status,
@@ -52,10 +58,10 @@ class AffiKeep_Cleanup {
 	 * 記事の更新日を変えないよう直接UPDATEし、キャッシュを消す。
 	 * @return array [posts => 更新記事数, blocks => 削除ブロック数]
 	 */
-	public static function run( int $year ): array {
+	public static function run( int $year, string $basis = 'date' ): array {
 		global $wpdb;
 
-		$articles       = self::find_articles( $year );
+		$articles       = self::find_articles( $year, $basis );
 		$posts_updated  = 0;
 		$blocks_removed = 0;
 
@@ -96,8 +102,9 @@ class AffiKeep_Cleanup {
 		if ( $year < 2000 || $year > intval( current_time( 'Y' ) ) ) {
 			wp_die( '年の指定が不正です' );
 		}
+		$basis = ( $_POST['cleanup_basis'] ?? '' ) === 'modified' ? 'modified' : 'date';
 
-		$result = self::run( $year );
+		$result = self::run( $year, $basis );
 		wp_redirect( add_query_arg( [
 			'page'           => 'affikeep-cleanup',
 			'done'           => 1,
@@ -123,9 +130,10 @@ class AffiKeep_Cleanup {
 			$min_year = $current_year - 10;
 		}
 
-		$selected_year = intval( $_GET['cleanup_year'] ?? 0 );
-		$articles      = $selected_year ? self::find_articles( $selected_year ) : null;
-		$total_blocks  = $articles ? array_sum( array_column( $articles, 'blocks' ) ) : 0;
+		$selected_year  = intval( $_GET['cleanup_year'] ?? 0 );
+		$selected_basis = ( $_GET['cleanup_basis'] ?? '' ) === 'modified' ? 'modified' : 'date';
+		$articles       = $selected_year ? self::find_articles( $selected_year, $selected_basis ) : null;
+		$total_blocks   = $articles ? array_sum( array_column( $articles, 'blocks' ) ) : 0;
 		?>
 		<div class="wrap affikeep-wrap">
 			<h1>記事整理</h1>
@@ -146,20 +154,25 @@ class AffiKeep_Cleanup {
 				古い記事からAffiKeepの商品ブロックだけを一括で取り除きます。
 				<strong>記事本文の他の部分は変更されず、記事の更新日も変わりません。</strong><br>
 				<span style="font-size:12px;color:#50575e;">
-					選んだ年の12月31日までに最終更新された記事が対象です。実行前に必ず対象一覧を確認してください。
+					選んだ年の12月31日までの記事が対象です。実行前に必ず対象一覧を確認してください。<br>
+					※Rinkerからのブロック変換を行った記事は「更新日」が変換した日になっています。古い記事を探す場合は<strong>公開日</strong>を基準にしてください。
 				</span>
 			</div>
 
 			<form method="get" action="<?php echo esc_url( admin_url( 'admin.php' ) ); ?>"
-				style="display:flex;align-items:center;gap:8px;margin-bottom:20px;">
+				style="display:flex;align-items:center;gap:8px;margin-bottom:20px;flex-wrap:wrap;">
 				<input type="hidden" name="page" value="affikeep-cleanup">
 				<label for="ak_cleanup_year"><strong>対象：</strong></label>
 				<select name="cleanup_year" id="ak_cleanup_year">
 					<?php for ( $y = $current_year - 1; $y >= $min_year; $y-- ) : ?>
 						<option value="<?php echo $y; ?>" <?php selected( $selected_year, $y ); ?>>
-							<?php echo $y; ?>年以前に更新された記事
+							<?php echo $y; ?>年以前
 						</option>
 					<?php endfor; ?>
+				</select>
+				<select name="cleanup_basis" id="ak_cleanup_basis">
+					<option value="date"     <?php selected( $selected_basis, 'date' ); ?>>公開日で絞り込む（推奨）</option>
+					<option value="modified" <?php selected( $selected_basis, 'modified' ); ?>>更新日で絞り込む</option>
 				</select>
 				<button type="submit" class="button button-primary">対象を確認</button>
 			</form>
@@ -175,8 +188,9 @@ class AffiKeep_Cleanup {
 					<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"
 						style="margin-bottom:16px;"
 						onsubmit="return confirm('<?php echo count( $articles ); ?>記事から <?php echo $total_blocks; ?>個 の商品ブロックを削除します。\nこの操作は元に戻せません。実行しますか？');">
-						<input type="hidden" name="action"       value="affikeep_cleanup_run">
-						<input type="hidden" name="cleanup_year" value="<?php echo esc_attr( $selected_year ); ?>">
+						<input type="hidden" name="action"        value="affikeep_cleanup_run">
+						<input type="hidden" name="cleanup_year"  value="<?php echo esc_attr( $selected_year ); ?>">
+						<input type="hidden" name="cleanup_basis" value="<?php echo esc_attr( $selected_basis ); ?>">
 						<?php wp_nonce_field( 'affikeep_cleanup_run' ); ?>
 						<button type="submit" class="button" style="color:#d63638;border-color:#d63638;">
 							この <?php echo count( $articles ); ?>記事 からブロックを一括削除
@@ -186,9 +200,10 @@ class AffiKeep_Cleanup {
 					<table class="widefat striped">
 						<thead><tr>
 							<th>記事タイトル</th>
-							<th style="width:100px;">ブロック数</th>
-							<th style="width:160px;">最終更新日</th>
-							<th style="width:80px;">状態</th>
+							<th style="width:90px;">ブロック数</th>
+							<th style="width:110px;">公開日</th>
+							<th style="width:110px;">最終更新日</th>
+							<th style="width:70px;">状態</th>
 							<th style="width:60px;">編集</th>
 						</tr></thead>
 						<tbody>
@@ -196,6 +211,7 @@ class AffiKeep_Cleanup {
 							<tr>
 								<td><?php echo esc_html( $a['title'] ?: '（無題）' ); ?></td>
 								<td><?php echo intval( $a['blocks'] ); ?></td>
+								<td><?php echo esc_html( mb_substr( $a['date'], 0, 10 ) ); ?></td>
 								<td><?php echo esc_html( mb_substr( $a['modified'], 0, 10 ) ); ?></td>
 								<td><?php echo $a['status'] === 'publish' ? '公開' : esc_html( $a['status'] ); ?></td>
 								<td><a href="<?php echo esc_url( get_edit_post_link( $a['id'] ) ); ?>">編集</a></td>
