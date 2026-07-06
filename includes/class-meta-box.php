@@ -355,9 +355,12 @@ class AffiKeep_Meta_Box {
 		}
 
 		// URLが変更されたらリンク状態を「未チェック」にリセット
+		// モール別ステータスも消す（残すと再計算ボタンが古い判定を復活させる）
 		if ( $url_changed ) {
 			delete_post_meta( $post_id, '_affikeep_link_status' );
 			delete_post_meta( $post_id, '_affikeep_last_checked' );
+			delete_post_meta( $post_id, '_affikeep_rakuten_status' );
+			delete_post_meta( $post_id, '_affikeep_yahoo_status' );
 		}
 	}
 }
