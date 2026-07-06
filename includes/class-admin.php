@@ -853,9 +853,6 @@ class AffiKeep_Admin {
 
 	public static function ajax_hide_in_article(): void {
 		check_ajax_referer( 'affikeep_articles', 'nonce' );
-		if ( ! current_user_can( 'edit_posts' ) ) {
-			wp_send_json_error( '権限がありません' );
-		}
 
 		$product_id = intval( $_POST['product_id'] ?? 0 );
 		$post_id    = intval( $_POST['post_id'] ?? 0 );
@@ -863,6 +860,11 @@ class AffiKeep_Admin {
 
 		if ( ! $product_id || ! $post_id ) {
 			wp_send_json_error( 'IDが無効です' );
+		}
+
+		// 対象記事そのものの編集権限を確認する（edit_postsだけだと他人の記事を操作できてしまう）
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			wp_send_json_error( '権限がありません' );
 		}
 
 		$post = get_post( $post_id );
@@ -893,15 +895,17 @@ class AffiKeep_Admin {
 
 	public static function ajax_delete_from_article(): void {
 		check_ajax_referer( 'affikeep_articles', 'nonce' );
-		if ( ! current_user_can( 'edit_posts' ) ) {
-			wp_send_json_error( '権限がありません' );
-		}
 
 		$product_id = intval( $_POST['product_id'] ?? 0 );
 		$post_id    = intval( $_POST['post_id'] ?? 0 );
 
 		if ( ! $product_id || ! $post_id ) {
 			wp_send_json_error( 'IDが無効です' );
+		}
+
+		// 対象記事そのものの編集権限を確認する（edit_postsだけだと他人の記事を操作できてしまう）
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			wp_send_json_error( '権限がありません' );
 		}
 
 		$post = get_post( $post_id );

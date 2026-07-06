@@ -7,6 +7,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
 	if ( ! searchInput || ! searchBtn ) return;
 
+	// 外部API由来の文字列をHTMLに入れる前にエスケープする
+	function esc( s ) {
+		return String( s == null ? '' : s )
+			.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+	}
+
 	searchBtn.addEventListener('click', function () {
 		var keyword = searchInput.value.trim();
 		if ( ! keyword ) return;
@@ -26,7 +33,7 @@ document.addEventListener('DOMContentLoaded', function () {
 			searchBtn.textContent = '楽天で検索';
 
 			if ( data.error ) {
-				searchResults.innerHTML = '<p class="ak-search-error">' + data.error + '</p>';
+				searchResults.innerHTML = '<p class="ak-search-error">' + esc( data.error ) + '</p>';
 				return;
 			}
 
@@ -40,11 +47,11 @@ document.addEventListener('DOMContentLoaded', function () {
 				affikeepItems[idx] = item;
 				html += '<li class="ak-result-item" data-idx="' + idx + '">';
 				if ( item.image_url ) {
-					html += '<img src="' + item.image_url + '" alt="" class="ak-result-img">';
+					html += '<img src="' + esc( item.image_url ) + '" alt="" class="ak-result-img">';
 				}
 				html += '<div class="ak-result-info">';
-				html += '<p class="ak-result-title">' + item.title + '</p>';
-				html += '<p class="ak-result-price">' + item.price + '</p>';
+				html += '<p class="ak-result-title">' + esc( item.title ) + '</p>';
+				html += '<p class="ak-result-price">' + esc( item.price ) + '</p>';
 				html += '</div>';
 				html += '<button type="button" class="button ak-select-btn">この商品を選ぶ</button>';
 				html += '</li>';
@@ -58,7 +65,7 @@ document.addEventListener('DOMContentLoaded', function () {
 					var idx  = parseInt( this.closest('.ak-result-item').dataset.idx, 10 );
 					var item = affikeepItems[idx];
 					fillFields( item );
-					searchResults.innerHTML = '<p class="ak-search-selected">✅ 選択しました：' + item.title + '</p>';
+					searchResults.innerHTML = '<p class="ak-search-selected">✅ 選択しました：' + esc( item.title ) + '</p>';
 				}.bind(btn));
 			});
 		} )
