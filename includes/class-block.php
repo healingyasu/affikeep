@@ -17,6 +17,10 @@ class AffiKeep_Block {
 						'type'    => 'number',
 						'default' => 0,
 					],
+					'product_title' => [
+						'type'    => 'string',
+						'default' => '',
+					],
 					'hidden' => [
 						'type'    => 'boolean',
 						'default' => false,

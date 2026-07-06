@@ -947,10 +947,17 @@ class AffiKeep_Admin {
 			if ( ! preg_match( '/<!-- wp:affikeep\/product \{[^}]*"product_id"\s*:\s*' . $product_id . '[^}]*\} \/-->/', $p->post_content ) ) {
 				continue;
 			}
+			// 記事内の全ブロックを走査し、この商品のブロックのhidden状態を見る
+			// （最初のブロックだけ見ると、複数商品がある記事で誤判定する）
 			$hidden = false;
-			if ( preg_match( '/<!-- wp:affikeep\/product (\{[^}]*\}) \/-->/', $p->post_content, $m ) ) {
-				$attrs  = json_decode( $m[1], true );
-				$hidden = is_array( $attrs ) && intval( $attrs['product_id'] ?? 0 ) === $product_id && ! empty( $attrs['hidden'] );
+			if ( preg_match_all( '/<!-- wp:affikeep\/product (\{[^}]*\}) \/-->/', $p->post_content, $all ) ) {
+				foreach ( $all[1] as $json ) {
+					$attrs = json_decode( $json, true );
+					if ( is_array( $attrs ) && intval( $attrs['product_id'] ?? 0 ) === $product_id ) {
+						$hidden = ! empty( $attrs['hidden'] );
+						break;
+					}
+				}
 			}
 			$result[] = [
 				'id'       => intval( $row['ID'] ),
@@ -993,9 +1000,11 @@ class AffiKeep_Admin {
 	private static function get_unused_product_ids(): array {
 		global $wpdb;
 
+		// post_type を絞らないとリビジョン（編集履歴）内の古いブロックまで「使用中」と数えてしまう
 		$contents = $wpdb->get_col(
 			"SELECT post_content FROM {$wpdb->posts}
 			 WHERE post_content LIKE '%wp:affikeep/product%'
+			 AND post_type IN ('post','page')
 			 AND post_status NOT IN ('trash','auto-draft')"
 		);
 

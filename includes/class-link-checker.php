@@ -88,7 +88,25 @@ class AffiKeep_Link_Checker {
 
 		AffiKeep_Logger::log( "リンクチェック実行: {$checked}件中 {$dead}件がリンク切れ", AffiKeep_Logger::LEVEL_INFO );
 
+		// Cronの自動実行時のみメール通知（手動チェック・AJAX連続実行では送らない）
+		if ( $dead > 0 && wp_doing_cron() ) {
+			self::notify_dead_links( $dead );
+		}
+
 		return [ 'checked' => $checked, 'dead' => $dead ];
+	}
+
+	/** リンク切れ検出をメールで知らせる */
+	private static function notify_dead_links( int $dead ): void {
+		$to = AffiKeep_Settings::get( 'notify_email' ) ?: get_option( 'admin_email' );
+		if ( ! $to ) {
+			return;
+		}
+		$subject = '[AffiKeep] リンク切れを' . $dead . '件検出しました';
+		$body    = "自動リンクチェックで {$dead}件 のリンク切れを検出しました。\n\n"
+				 . "管理画面で確認してください：\n"
+				 . admin_url( 'admin.php?page=affikeep-links&filter=dead' ) . "\n";
+		wp_mail( $to, $subject, $body );
 	}
 
 	/**

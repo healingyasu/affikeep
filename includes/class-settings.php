@@ -76,6 +76,9 @@ class AffiKeep_Settings {
 			$clean[ $field ] = sanitize_text_field( $input[ $field ] ?? '' );
 		}
 
+		// メールアドレスはメール形式で検証（不正な値は空になる）
+		$clean['notify_email'] = sanitize_email( $input['notify_email'] ?? '' );
+
 		$clean['check_interval_hours'] = absint( $input['check_interval_hours'] ?? 24 );
 		if ( $clean['check_interval_hours'] < 1 ) {
 			$clean['check_interval_hours'] = 24;
