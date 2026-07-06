@@ -89,6 +89,16 @@ class AffiKeep_Admin {
 			[ __CLASS__, 'page_links' ]
 		);
 
+		// 記事整理
+		add_submenu_page(
+			'affikeep',
+			'記事整理 | AffiKeep',
+			'記事整理',
+			'manage_options',
+			'affikeep-cleanup',
+			[ 'AffiKeep_Cleanup', 'render_page' ]
+		);
+
 		// エラーログ
 		add_submenu_page(
 			'affikeep',
