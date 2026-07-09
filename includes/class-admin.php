@@ -528,6 +528,8 @@ class AffiKeep_Admin {
 				</div>
 			<?php endif; ?>
 
+			<?php self::render_license_section(); ?>
+
 			<form method="post" action="options.php">
 				<?php settings_fields( 'affikeep_settings_group' ); ?>
 
@@ -716,6 +718,56 @@ class AffiKeep_Admin {
 
 				<?php submit_button( '保存する' ); ?>
 			</form>
+		</div>
+		<?php
+	}
+
+	/** 設定画面のProライセンスセクション */
+	private static function render_license_section(): void {
+		$license = AffiKeep_License::get_data();
+		$active  = AffiKeep_License::is_active();
+		?>
+		<?php if ( isset( $_GET['license'] ) ) : ?>
+			<?php if ( $_GET['license'] === 'activated' ) : ?>
+				<div class="notice notice-success is-dismissible" style="padding:12px 16px;"><strong>ライセンスを有効化しました。</strong></div>
+			<?php elseif ( $_GET['license'] === 'invalid' ) : ?>
+				<div class="notice notice-error is-dismissible" style="padding:12px 16px;"><strong>ライセンスキーが無効です。入力内容をご確認ください。</strong></div>
+			<?php elseif ( $_GET['license'] === 'deactivated' ) : ?>
+				<div class="notice notice-success is-dismissible" style="padding:12px 16px;"><strong>ライセンスを解除しました。</strong></div>
+			<?php endif; ?>
+		<?php endif; ?>
+
+		<h2 class="affikeep-section-title">Proライセンス</h2>
+		<div class="notice notice-info inline" style="padding:14px 18px;margin:0 0 20px;">
+			<?php if ( $active ) : ?>
+				<p style="margin:0 0 10px;">
+					<span style="background:#00a32a;color:#fff;padding:2px 8px;border-radius:3px;font-size:12px;font-weight:600;">Pro 有効</span>
+					<?php if ( ! empty( $license['expires_at'] ) ) : ?>
+						&nbsp; 有効期限: <?php echo esc_html( $license['expires_at'] ); ?>
+						<?php if ( AffiKeep_License::is_in_grace_period() ) : ?>
+							&nbsp;<strong style="color:#b32d2e;">（期限切れ・猶予期間中です。更新をお願いします）</strong>
+						<?php endif; ?>
+					<?php endif; ?>
+				</p>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+					<input type="hidden" name="action" value="affikeep_deactivate_license">
+					<?php wp_nonce_field( 'affikeep_deactivate_license' ); ?>
+					<button type="submit" class="button">ライセンスを解除</button>
+				</form>
+			<?php else : ?>
+				<p style="margin:0 0 10px;">
+					<span style="background:#72777c;color:#fff;padding:2px 8px;border-radius:3px;font-size:12px;font-weight:600;">Free版</span>
+					&nbsp; ライセンスキーを入力するとPro機能が使えるようになります。
+				</p>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+					<input type="hidden" name="action" value="affikeep_activate_license">
+					<?php wp_nonce_field( 'affikeep_activate_license' ); ?>
+					<input type="text" name="license_key" class="regular-text"
+						placeholder="AK-xxxx-xxxxxxxx-xxxxxxxxxxxxxxxx"
+						value="<?php echo esc_attr( $license['key'] ?? '' ); ?>">
+					<button type="submit" class="button button-primary">有効化</button>
+				</form>
+			<?php endif; ?>
 		</div>
 		<?php
 	}

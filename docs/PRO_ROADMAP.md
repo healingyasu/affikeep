@@ -9,18 +9,22 @@
 
 目的: Pro機能を安全に追加できる土台を作る。ユーザーから見える変化は「設定画面にProライセンス欄が増える」程度に留める。
 
-- [ ] `AffiKeep_License` クラス実装（`includes/class-license.php`）
+- [x] `AffiKeep_License` クラス実装（`includes/class-license.php`）
   - オフラインキー検証、有効化ボタン、ステータス表示
   - 期限切れ7日間のグレースピリオド
-- [ ] `AffiKeep_Malls` レジストリ実装（`includes/class-malls.php`）
+- [x] `AffiKeep_Malls` レジストリ実装（`includes/class-malls.php`）
   - 既存3モール（amazon/rakuten/yahoo）を移行
   - `class-settings.php` / `class-link-checker.php` の switch文をレジストリ参照に置き換え
-- [ ] 手動キー発行の運用フロー整備
-  - Stripe決済リンク作成
-  - 購入後にキーを手動発行・メール送付する手順をドキュメント化
-- [ ] Pro判定ヘルパー（`AffiKeep_License::is_active()`）を各所から呼べる状態にする
+- [x] 手動キー発行の運用フロー整備
+  - `bin/generate-license-key.php` でキー発行（Stripe決済リンク＋手動発行の運用手順は [`PRO_LICENSE_ISSUING.md`](./PRO_LICENSE_ISSUING.md)）
+- [x] Pro判定ヘルパー（`AffiKeep_License::is_active()`）を各所から呼べる状態にする
 
-**完了条件**: 無料版として現状のリグレッションが無いこと（既存の全機能が今まで通り動作）。ライセンスキーを入力すると設定画面に「Pro: 有効」と表示されること。
+**完了条件**: 無料版として現状のリグレッションが無いこと（既存の全機能が今まで通り動作）。ライセンスキーを入力すると設定画面に「Pro 有効」と表示されること。
+
+**実装メモ**:
+- `includes/class-license.php` の `SECRET` 定数はリポジトリに含まれる値のため、配布ビルド前に固有の値へ変更が必要（[`PRO_LICENSE_ISSUING.md`](./PRO_LICENSE_ISSUING.md) 5節）。
+- 即時失効の仕組みはフェーズ0では未対応（オフライン検証のため）。フェーズ4のリモート検証移行時に追加する。
+- 実サイトでの動作確認（設定画面でのキー有効化・リンク切れ判定の回帰）はまだ未実施。マージ前に要確認。
 
 ## フェーズ1: クリック計測・収益分析ダッシュボード（v0.6.0）
 

@@ -3,7 +3,7 @@
  * Plugin Name: AffiKeep
  * Plugin URI:  https://hlc-zuigen.xyz
  * Description: アフィリエイト収益管理コックピット。リンク切れチェック・記事別クリック計測・商品管理を一画面で。
- * Version:     0.4.3
+ * Version:     0.5.0
  * Author:      Yasuhiro Ueda
  * Author URI:  https://yasuhiro.me
  * Text Domain: affikeep
@@ -16,13 +16,15 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'AFFIKEEP_VERSION', '0.4.3' );
-define( 'AFFIKEEP_BUILD',   '2026-07-06 (記事整理: 公開日基準を追加・デフォルトに)' );
+define( 'AFFIKEEP_VERSION', '0.5.0' );
+define( 'AFFIKEEP_BUILD',   '2026-07-09 (Pro基盤: ライセンス機構・モールレジストリを追加)' );
 define( 'AFFIKEEP_DIR',     plugin_dir_path( __FILE__ ) );
 define( 'AFFIKEEP_URL',     plugin_dir_url( __FILE__ ) );
 define( 'AFFIKEEP_SLUG',    'affikeep' );
 
 require_once AFFIKEEP_DIR . 'includes/class-logger.php';
+require_once AFFIKEEP_DIR . 'includes/class-license.php';
+require_once AFFIKEEP_DIR . 'includes/class-malls.php';
 require_once AFFIKEEP_DIR . 'includes/class-post-type.php';
 require_once AFFIKEEP_DIR . 'includes/class-settings.php';
 require_once AFFIKEEP_DIR . 'includes/class-admin.php';
@@ -37,6 +39,7 @@ register_activation_hook( __FILE__,   [ 'AffiKeep_Admin', 'on_activate' ] );
 register_deactivation_hook( __FILE__, [ 'AffiKeep_Admin', 'on_deactivate' ] );
 
 add_action( 'plugins_loaded', function () {
+	AffiKeep_License::init();
 	AffiKeep_Post_Type::init();
 	AffiKeep_Settings::init();
 	AffiKeep_Admin::init();

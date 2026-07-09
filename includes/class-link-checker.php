@@ -206,17 +206,18 @@ class AffiKeep_Link_Checker {
 			return 'unknown';
 		}
 
-		// Amazonの特別処理（bot検知・販売終了の本文判定）
-		if ( $mall === 'amazon' ) {
-			$result = self::judge_amazon_body( $code, $body );
-			$reason = self::amazon_reason( $code, $body );
+		$def = AffiKeep_Malls::get( $mall ) ?? [];
+
+		// bot検知文言・要確認文言を持つモール（Amazon）はコード範囲に関わらず本文判定する
+		if ( ! empty( $def['bot_phrases'] ) || ! empty( $def['unknown_phrases'] ) ) {
+			[ $result, $reason ] = self::judge_by_phrases( $def, $code, $body );
 			self::log_check( $mall, $url, $code, $result, $reason );
 			return $result;
 		}
 
 		// 楽天・Yahoo：200系なら基本ok。本文に終了文言があればdead
 		if ( $code >= 200 && $code < 400 ) {
-			$matched = self::find_dead_phrase( $body );
+			$matched = self::find_dead_phrase( $body, $def['dead_phrases'] ?? [] );
 			$result  = $matched ? 'dead' : 'ok';
 			self::log_check( $mall, $url, $code, $result, $matched ? "終了文言「{$matched}」を検出" : '異常なし' );
 			return $result;
@@ -289,70 +290,35 @@ class AffiKeep_Link_Checker {
 		] );
 	}
 
-	/** Amazon判定の理由文字列を生成（ログ用） */
-	private static function amazon_reason( int $code, string $body ): string {
-		$bot_phrases = [ 'ロボットによる', '自動化されたアクセス', 'Type the characters', 'api-services-support@amazon.com', 'To discuss automated access' ];
-		foreach ( $bot_phrases as $p ) {
+	/**
+	 * bot検知文言・要確認文言を持つモール（Amazon）向けの本文判定。
+	 * 優先順位: bot検知 → 要確認 → 販売終了 → HTTPステータスによるok/unknown。
+	 * @return array [ 判定結果, 理由文字列 ]
+	 */
+	private static function judge_by_phrases( array $def, int $code, string $body ): array {
+		foreach ( $def['bot_phrases'] ?? [] as $p ) {
 			if ( mb_stripos( $body, $p ) !== false ) {
-				return "bot検知ページ「{$p}」を検出（判定保留）";
+				return [ 'unknown', "bot検知ページ「{$p}」を検出（判定保留）" ];
 			}
 		}
-		$unknown_phrases = [ '現在お取り扱いできません', 'この商品は現在お取り扱いできません' ];
-		foreach ( $unknown_phrases as $p ) {
+		foreach ( $def['unknown_phrases'] ?? [] as $p ) {
 			if ( mb_stripos( $body, $p ) !== false ) {
-				return "要確認文言「{$p}」を検出（bot検知の可能性あり）";
+				return [ 'unknown', "要確認文言「{$p}」を検出（bot検知の可能性あり）" ];
 			}
 		}
-		$dead_phrases = [ 'ページが見つかりませんでした', 'Page Not Found' ];
-		foreach ( $dead_phrases as $p ) {
+		foreach ( $def['dead_phrases'] ?? [] as $p ) {
 			if ( mb_stripos( $body, $p ) !== false ) {
-				return "終了文言「{$p}」を検出";
+				return [ 'dead', "終了文言「{$p}」を検出" ];
 			}
 		}
-		return '異常なし';
-	}
-
-	/** Amazon本文の判定 */
-	private static function judge_amazon_body( int $code, string $body ): string {
-		// bot検知・CAPTCHAページ → unknown（誤検知を避け再試行待ち）
-		$bot_phrases = [
-			'ロボットによる', '自動化されたアクセス', 'Type the characters',
-			'api-services-support@amazon.com', 'To discuss automated access',
-		];
-		foreach ( $bot_phrases as $p ) {
-			if ( mb_stripos( $body, $p ) !== false ) {
-				return 'unknown';
-			}
-		}
-
-		// 「現在お取り扱いできません」はbot検知時にも出るためunknown扱い（再試行で判断）
-		$unknown_phrases = [ '現在お取り扱いできません', 'この商品は現在お取り扱いできません' ];
-		foreach ( $unknown_phrases as $p ) {
-			if ( mb_stripos( $body, $p ) !== false ) {
-				return 'unknown';
-			}
-		}
-
-		// 明確な404ページ文言 → dead
-		$dead_phrases = [ 'ページが見つかりませんでした', 'Page Not Found' ];
-		foreach ( $dead_phrases as $p ) {
-			if ( mb_stripos( $body, $p ) !== false ) {
-				return 'dead';
-			}
-		}
-
 		if ( $code >= 200 && $code < 400 ) {
-			return 'ok';
+			return [ 'ok', '異常なし' ];
 		}
-		return 'unknown';
+		return [ 'unknown', 'HTTPステータス ' . $code ];
 	}
 
-	/** 楽天・Yahoo共通の終了文言判定。マッチした文言を返す（なければ空文字） */
-	private static function find_dead_phrase( string $body ): string {
-		$phrases = [
-			'販売を終了', 'ページが見つかりません', '商品が見つかりません',
-			'お探しのページは見つかりませんでした', 'この商品は現在販売されておりません',
-		];
+	/** 終了文言リストと本文を照合。マッチした文言を返す（なければ空文字） */
+	private static function find_dead_phrase( string $body, array $phrases ): string {
 		foreach ( $phrases as $p ) {
 			if ( mb_stripos( $body, $p ) !== false ) {
 				return $p;
