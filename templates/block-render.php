@@ -59,18 +59,27 @@ $btn_yahoo   = esc_html( $s['button_text_yahoo']   ?: 'Yahoo!で見る' );
 				<?php if ( $amazon_url ) : ?>
 					<a href="<?php echo esc_url( $amazon_url ); ?>"
 						class="affikeep-btn affikeep-btn-amazon"
+						data-product-id="<?php echo esc_attr( $product_id ); ?>"
+						data-post-id="<?php echo esc_attr( $post->ID ); ?>"
+						data-mall="amazon"
 						target="_blank" rel="nofollow noopener"><?php echo $btn_amazon; ?></a>
 				<?php endif; ?>
 
 				<?php if ( $rakuten_url ) : ?>
 					<a href="<?php echo esc_url( $rakuten_url ); ?>"
 						class="affikeep-btn affikeep-btn-rakuten"
+						data-product-id="<?php echo esc_attr( $product_id ); ?>"
+						data-post-id="<?php echo esc_attr( $post->ID ); ?>"
+						data-mall="rakuten"
 						target="_blank" rel="nofollow noopener"><?php echo $btn_rakuten; ?></a>
 				<?php endif; ?>
 
 				<?php if ( $yahoo_url ) : ?>
 					<a href="<?php echo esc_url( $yahoo_url ); ?>"
 						class="affikeep-btn affikeep-btn-yahoo"
+						data-product-id="<?php echo esc_attr( $product_id ); ?>"
+						data-post-id="<?php echo esc_attr( $post->ID ); ?>"
+						data-mall="yahoo"
 						target="_blank" rel="nofollow noopener"><?php echo $btn_yahoo; ?></a>
 				<?php endif; ?>
 			</div>

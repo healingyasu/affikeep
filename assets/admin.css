@@ -82,3 +82,11 @@
 	background: #72777c;
 	color: #fff;
 }
+
+/* アクセス解析チャート */
+#affikeep-analytics-chart {
+	background: #fcfcfb;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	padding: 16px;
+}
