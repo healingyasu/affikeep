@@ -131,6 +131,16 @@
 	color: #fff;
 }
 
+.affikeep-btn-rakuten_travel {
+	background: #bf0000;
+	color: #fff;
+}
+
+.affikeep-btn-booking {
+	background: #003580;
+	color: #fff;
+}
+
 /* スマホ対応 */
 @media (max-width: 480px) {
 	.affikeep-card-inner {

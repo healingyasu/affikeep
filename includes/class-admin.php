@@ -273,6 +273,17 @@ class AffiKeep_Admin {
 					ステータス再計算（URLを叩かず即時更新）
 				</button>
 				<span id="affikeep-recalc-result" style="margin-left:8px;font-size:12px;color:#787c82;"></span>
+
+				<?php if ( AffiKeep_License::is_active() ) : ?>
+					<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=affikeep_export_products_csv' ), 'affikeep_export_products_csv' ) ); ?>"
+						class="button" style="margin-left:8px;">
+						📄 商品一覧をCSVでエクスポート
+					</a>
+				<?php else : ?>
+					<span style="margin-left:8px;font-size:12px;color:#787c82;">
+						🔒 <a href="<?php echo esc_url( admin_url( 'admin.php?page=affikeep-settings#ak-license-section' ) ); ?>">Pro版</a>ならCSVエクスポートができます
+					</span>
+				<?php endif; ?>
 			</div>
 
 			<?php
@@ -353,30 +364,38 @@ class AffiKeep_Admin {
 						</button>
 					</div>
 
+					<?php
+					// bot検知系（Amazon等）を除いた、判定可能なモールのみ列として表示する
+					$table_malls = array_filter(
+						AffiKeep_Malls::available(),
+						fn( $def ) => empty( $def['bot_phrases'] )
+					);
+					?>
 					<table class="widefat striped">
 						<thead><tr>
 							<th style="width:32px;"><input type="checkbox" id="affikeep-select-all" title="全選択"></th>
 							<th>商品名</th>
-							<th style="width:80px;">楽天</th>
-							<th style="width:80px;">Yahoo</th>
+							<?php foreach ( $table_malls as $def ) : ?>
+								<th style="width:80px;"><?php echo esc_html( $def['label'] ); ?></th>
+							<?php endforeach; ?>
 							<th style="width:160px;">最終チェック</th>
 							<th style="width:60px;">編集</th>
 						</tr></thead>
 						<tbody>
 						<?php while ( $problem->have_posts() ) :
 							$problem->the_post();
-							$id             = get_the_ID();
-							$last           = get_post_meta( $id, '_affikeep_last_checked', true );
-							$rakuten_status = get_post_meta( $id, '_affikeep_rakuten_status', true ) ?: '';
-							$yahoo_status   = get_post_meta( $id, '_affikeep_yahoo_status',   true ) ?: '';
-							$rakuten_url    = get_post_meta( $id, '_affikeep_rakuten_url', true );
-							$yahoo_url      = get_post_meta( $id, '_affikeep_yahoo_url',   true );
+							$id   = get_the_ID();
+							$last = get_post_meta( $id, '_affikeep_last_checked', true );
 						?>
 							<tr>
 								<td><input type="checkbox" name="product_ids[]" value="<?php echo esc_attr( $id ); ?>"></td>
 								<td><?php echo esc_html( get_the_title() ); ?></td>
-								<td><?php echo self::mall_badge( $rakuten_status, ! empty( $rakuten_url ) ); ?></td>
-								<td><?php echo self::mall_badge( $yahoo_status,   ! empty( $yahoo_url ) ); ?></td>
+								<?php foreach ( $table_malls as $mall_id => $def ) :
+									$mall_status = get_post_meta( $id, "_affikeep_{$mall_id}_status", true ) ?: '';
+									$mall_url    = get_post_meta( $id, "_affikeep_{$mall_id}_url", true );
+								?>
+									<td><?php echo self::mall_badge( $mall_status, ! empty( $mall_url ) ); ?></td>
+								<?php endforeach; ?>
 								<td><?php echo esc_html( $last ?: '未チェック' ); ?></td>
 								<td><a href="<?php echo esc_url( get_edit_post_link( $id ) ); ?>">編集</a></td>
 							</tr>
@@ -528,6 +547,8 @@ class AffiKeep_Admin {
 				</div>
 			<?php endif; ?>
 
+			<?php self::render_license_section(); ?>
+
 			<form method="post" action="options.php">
 				<?php settings_fields( 'affikeep_settings_group' ); ?>
 
@@ -615,6 +636,45 @@ class AffiKeep_Admin {
 					</tr>
 				</table>
 
+				<h2 class="affikeep-section-title">Amazon PA-API連携（Pro機能・商品検索用）</h2>
+				<?php if ( AffiKeep_License::is_active() ) : ?>
+					<p class="description" style="margin-bottom:12px;">
+						商品編集画面でAmazon商品をキーワード検索できるようになります。
+						<a href="https://affiliate.amazon.co.jp/assoc_credentials/home" target="_blank" rel="noopener">Amazonアソシエイトの認証情報管理</a> で発行できます。
+						パートナータグは上のトラッキングIDと共通です。
+					</p>
+					<table class="form-table">
+						<tr>
+							<th><label for="ak_amazon_paapi_access_key">アクセスキーID</label></th>
+							<td>
+								<input type="text" id="ak_amazon_paapi_access_key"
+									name="affikeep_settings[amazon_paapi_access_key]"
+									value="<?php echo esc_attr( $s['amazon_paapi_access_key'] ); ?>"
+									class="regular-text">
+							</td>
+						</tr>
+						<tr>
+							<th><label for="ak_amazon_paapi_secret_key">シークレットキー</label></th>
+							<td>
+								<input type="text" id="ak_amazon_paapi_secret_key"
+									name="affikeep_settings[amazon_paapi_secret_key]"
+									value="<?php echo esc_attr( $s['amazon_paapi_secret_key'] ); ?>"
+									class="regular-text">
+								<p class="description">
+									PA-APIの利用には直近のAmazonアソシエイト経由の売上実績が必要です。資格情報が無い場合はこの機能は使えません（商品の手入力は引き続き可能です）。
+								</p>
+							</td>
+						</tr>
+					</table>
+				<?php else : ?>
+					<div class="notice notice-info inline" style="padding:12px 16px;margin:0;">
+						<p style="margin:0;">
+							🔒 Pro版ではAmazon PA-APIを使った商品検索・自動入力ができます（商品名・画像・価格・URLを自動取得）。
+							<a href="#ak-license-section">上部からライセンスを有効化</a> すると設定できるようになります。
+						</p>
+					</div>
+				<?php endif; ?>
+
 				<h2 class="affikeep-section-title">Yahoo!ショッピング（バリューコマース）</h2>
 				<p class="description" style="margin-bottom:12px;">
 					LinkSwitch か アフィリエイトID のどちらかを入力してください。両方入力した場合は LinkSwitch が優先されます。<br>
@@ -669,6 +729,57 @@ class AffiKeep_Admin {
 					</tr>
 				</table>
 
+				<h2 class="affikeep-section-title">対応モール拡張（Pro機能）</h2>
+				<?php if ( AffiKeep_License::is_active() ) : ?>
+					<p class="description" style="margin-bottom:12px;">
+						楽天トラベルは商品編集画面のURL欄に、楽天アフィリエイトで発行した提携済みリンクをそのまま貼り付けてください（変換不要）。
+						Booking.comは通常の宿泊ページURLを貼るだけで、下のアフィリエイトIDが自動的に付与されます。
+					</p>
+					<table class="form-table">
+						<tr>
+							<th><label for="ak_booking_affiliate_id">Booking.com アフィリエイトID（aid）</label></th>
+							<td>
+								<input type="text" id="ak_booking_affiliate_id"
+									name="affikeep_settings[booking_affiliate_id]"
+									value="<?php echo esc_attr( $s['booking_affiliate_id'] ); ?>"
+									class="regular-text"
+									placeholder="例: 1234567">
+								<p class="description">
+									<a href="https://partner.booking.com/" target="_blank" rel="noopener">Booking.comパートナーセンター</a> で確認できます。
+								</p>
+							</td>
+						</tr>
+						<tr>
+							<th><label for="ak_btn_rakuten_travel">楽天トラベルボタン</label></th>
+							<td>
+								<input type="text" id="ak_btn_rakuten_travel"
+									name="affikeep_settings[button_text_rakuten_travel]"
+									value="<?php echo esc_attr( $s['button_text_rakuten_travel'] ); ?>"
+									class="regular-text">
+							</td>
+						</tr>
+						<tr>
+							<th><label for="ak_btn_booking">Booking.comボタン</label></th>
+							<td>
+								<input type="text" id="ak_btn_booking"
+									name="affikeep_settings[button_text_booking]"
+									value="<?php echo esc_attr( $s['button_text_booking'] ); ?>"
+									class="regular-text">
+							</td>
+						</tr>
+					</table>
+					<p class="description" style="margin-top:-8px;">
+						※もしもアフィリエイト経由には対応していません（実アカウントでの提携IDを検証できていないため、誤った値で成果が計測されないようこの2モールは直接リンクのみとしています）。
+					</p>
+				<?php else : ?>
+					<div class="notice notice-info inline" style="padding:12px 16px;margin:0;">
+						<p style="margin:0;">
+							🔒 Pro版では楽天トラベル・Booking.comにも対応できます（リンク切れチェック・ボタン表示）。
+							<a href="#ak-license-section">上部からライセンスを有効化</a> すると設定できるようになります。
+						</p>
+					</div>
+				<?php endif; ?>
+
 				<h2 class="affikeep-section-title">通知設定</h2>
 				<table class="form-table">
 					<tr>
@@ -716,6 +827,56 @@ class AffiKeep_Admin {
 
 				<?php submit_button( '保存する' ); ?>
 			</form>
+		</div>
+		<?php
+	}
+
+	/** 設定画面のProライセンスセクション */
+	private static function render_license_section(): void {
+		$license = AffiKeep_License::get_data();
+		$active  = AffiKeep_License::is_active();
+		?>
+		<?php if ( isset( $_GET['license'] ) ) : ?>
+			<?php if ( $_GET['license'] === 'activated' ) : ?>
+				<div class="notice notice-success is-dismissible" style="padding:12px 16px;"><strong>ライセンスを有効化しました。</strong></div>
+			<?php elseif ( $_GET['license'] === 'invalid' ) : ?>
+				<div class="notice notice-error is-dismissible" style="padding:12px 16px;"><strong>ライセンスキーが無効です。入力内容をご確認ください。</strong></div>
+			<?php elseif ( $_GET['license'] === 'deactivated' ) : ?>
+				<div class="notice notice-success is-dismissible" style="padding:12px 16px;"><strong>ライセンスを解除しました。</strong></div>
+			<?php endif; ?>
+		<?php endif; ?>
+
+		<h2 class="affikeep-section-title" id="ak-license-section">Proライセンス</h2>
+		<div class="notice notice-info inline" style="padding:14px 18px;margin:0 0 20px;">
+			<?php if ( $active ) : ?>
+				<p style="margin:0 0 10px;">
+					<span style="background:#00a32a;color:#fff;padding:2px 8px;border-radius:3px;font-size:12px;font-weight:600;">Pro 有効</span>
+					<?php if ( ! empty( $license['expires_at'] ) ) : ?>
+						&nbsp; 有効期限: <?php echo esc_html( $license['expires_at'] ); ?>
+						<?php if ( AffiKeep_License::is_in_grace_period() ) : ?>
+							&nbsp;<strong style="color:#b32d2e;">（期限切れ・猶予期間中です。更新をお願いします）</strong>
+						<?php endif; ?>
+					<?php endif; ?>
+				</p>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+					<input type="hidden" name="action" value="affikeep_deactivate_license">
+					<?php wp_nonce_field( 'affikeep_deactivate_license' ); ?>
+					<button type="submit" class="button">ライセンスを解除</button>
+				</form>
+			<?php else : ?>
+				<p style="margin:0 0 10px;">
+					<span style="background:#72777c;color:#fff;padding:2px 8px;border-radius:3px;font-size:12px;font-weight:600;">Free版</span>
+					&nbsp; ライセンスキーを入力するとPro機能が使えるようになります。
+				</p>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+					<input type="hidden" name="action" value="affikeep_activate_license">
+					<?php wp_nonce_field( 'affikeep_activate_license' ); ?>
+					<input type="text" name="license_key" class="regular-text"
+						placeholder="AK-xxxx-xxxxxxxx-xxxxxxxxxxxxxxxx"
+						value="<?php echo esc_attr( $license['key'] ?? '' ); ?>">
+					<button type="submit" class="button button-primary">有効化</button>
+				</form>
+			<?php endif; ?>
 		</div>
 		<?php
 	}

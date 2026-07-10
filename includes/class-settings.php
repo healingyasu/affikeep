@@ -39,7 +39,11 @@ class AffiKeep_Settings {
 			'rakuten_affiliate_id'  => '',
 
 			// Amazon アソシエイツ
-			'amazon_tracking_id'    => '',  // トラッキングID（例: yoursite-22）
+			'amazon_tracking_id'      => '',  // トラッキングID（例: yoursite-22）
+
+			// Amazon PA-API（Pro限定・商品検索用）
+			'amazon_paapi_access_key' => '',
+			'amazon_paapi_secret_key' => '',
 
 			// Yahoo!ショッピング（バリューコマース）
 			'yahoo_linkswitch'      => '',  // LinkSwitch（アフィリエイトIDより優先）
@@ -48,14 +52,19 @@ class AffiKeep_Settings {
 			// もしもアフィリエイト（全モール共通のa_id）
 			'moshimo_aid'           => '',
 
+			// Booking.com（Pro限定・提携ID=aidをURLに付与）
+			'booking_affiliate_id'  => '',
+
 			// リンク切れチェック設定
 			'check_interval_hours'  => 24,  // チェック間隔（時間）
 			'notify_email'          => '',  // 通知先メール（空=管理者メール）
 
 			// 表示設定
-			'button_text_amazon'    => 'Amazonで見る',
-			'button_text_rakuten'   => '楽天で見る',
-			'button_text_yahoo'     => 'Yahoo!で見る',
+			'button_text_amazon'         => 'Amazonで見る',
+			'button_text_rakuten'        => '楽天で見る',
+			'button_text_yahoo'          => 'Yahoo!で見る',
+			'button_text_rakuten_travel' => '楽天トラベルで見る',
+			'button_text_booking'        => 'Booking.comで予約',
 		];
 	}
 
@@ -65,11 +74,13 @@ class AffiKeep_Settings {
 
 		$text_fields = [
 			'rakuten_app_id', 'rakuten_access_key', 'rakuten_app_url', 'rakuten_affiliate_id',
-			'amazon_tracking_id',
+			'amazon_tracking_id', 'amazon_paapi_access_key', 'amazon_paapi_secret_key',
 			'yahoo_linkswitch', 'yahoo_affiliate_id',
 			'moshimo_aid',
+			'booking_affiliate_id',
 			'notify_email',
 			'button_text_amazon', 'button_text_rakuten', 'button_text_yahoo',
+			'button_text_rakuten_travel', 'button_text_booking',
 		];
 
 		foreach ( $text_fields as $field ) {
@@ -102,37 +113,20 @@ class AffiKeep_Settings {
 			return $url;
 		}
 
-		switch ( $mall ) {
-			case 'amazon':
-				// 直接：トラッキングIDを tag= に付与
-				$tag = self::get( 'amazon_tracking_id' );
-				if ( $tag ) {
-					return add_query_arg( 'tag', $tag, $url );
-				}
-				if ( self::get( 'moshimo_aid' ) ) {
-					return self::moshimo_wrap( $url, 'amazon' );
-				}
-				return $url;
+		$def = AffiKeep_Malls::get( $mall );
+		if ( ! $def ) {
+			return $url;
+		}
 
-			case 'rakuten':
-				// 直接：楽天検索で取得したURLは既にアフィリエイトIDが入っているのでそのまま使う
-				if ( self::get( 'rakuten_affiliate_id' ) ) {
-					return $url;
-				}
-				if ( self::get( 'moshimo_aid' ) ) {
-					return self::moshimo_wrap( $url, 'rakuten' );
-				}
-				return $url;
+		if ( isset( $def['direct_url'] ) ) {
+			$direct = $def['direct_url']( $url );
+			if ( $direct !== null ) {
+				return $direct;
+			}
+		}
 
-			case 'yahoo':
-				// 直接：LinkSwitchはサイト全体のJSが自動変換するので素のURLを出力
-				if ( self::get( 'yahoo_linkswitch' ) ) {
-					return $url;
-				}
-				if ( self::get( 'moshimo_aid' ) ) {
-					return self::moshimo_wrap( $url, 'yahoo' );
-				}
-				return $url;
+		if ( self::get( 'moshimo_aid' ) && isset( $def['moshimo'] ) ) {
+			return self::moshimo_wrap( $url, $def['moshimo'] );
 		}
 
 		return $url;
@@ -140,30 +134,17 @@ class AffiKeep_Settings {
 
 	/**
 	 * URLをもしも経由リンクに変換する（内部用）。
-	 * p_id・pc_id・pl_id はもしもが各モールに割り当てた値。
+	 * p_id・pc_id・pl_id はもしもが各モールに割り当てた値（AffiKeep_Mallsで定義）。
 	 * ※pc_id/pl_idは登録サイトにより異なる場合があるため、もしも利用者は公開前にボタン動作を確認すること。
 	 */
-	private static function moshimo_wrap( string $url, string $mall ): string {
+	private static function moshimo_wrap( string $url, array $ids ): string {
 		$aid = self::get( 'moshimo_aid' );
 		if ( empty( $aid ) ) {
 			return $url;
 		}
 
-		switch ( $mall ) {
-			case 'amazon':
-				return 'https://af.moshimo.com/af/c/click?a_id=' . urlencode( $aid )
-					. '&p_id=170&pc_id=185&pl_id=4062&url=' . urlencode( $url );
-
-			case 'rakuten':
-				return 'https://af.moshimo.com/af/c/click?a_id=' . urlencode( $aid )
-					. '&p_id=54&pc_id=54&pl_id=616&url=' . urlencode( $url );
-
-			case 'yahoo':
-				return 'https://af.moshimo.com/af/c/click?a_id=' . urlencode( $aid )
-					. '&p_id=1&pc_id=1&pl_id=1&url=' . urlencode( $url );
-
-			default:
-				return $url;
-		}
+		return 'https://af.moshimo.com/af/c/click?a_id=' . urlencode( $aid )
+			. '&p_id=' . $ids['p_id'] . '&pc_id=' . $ids['pc_id'] . '&pl_id=' . $ids['pl_id']
+			. '&url=' . urlencode( $url );
 	}
 }

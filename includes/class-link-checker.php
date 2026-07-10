@@ -12,6 +12,26 @@ class AffiKeep_Link_Checker {
 		add_action( 'admin_post_affikeep_check_now',     [ __CLASS__, 'handle_check_now' ] );
 		add_action( 'wp_ajax_affikeep_auto_check',       [ __CLASS__, 'ajax_auto_check' ] );
 		add_action( 'wp_ajax_affikeep_recalc_statuses',  [ __CLASS__, 'ajax_recalculate' ] );
+		add_action( 'wp_ajax_affikeep_check_single',     [ __CLASS__, 'ajax_check_single' ] );
+	}
+
+	/** 商品編集画面用: 1商品だけを即時チェックする（未チェック商品の自動チェック・手動再チェックボタン用） */
+	public static function ajax_check_single(): void {
+		check_ajax_referer( 'affikeep_check_single', 'nonce' );
+
+		$post_id = intval( $_POST['post_id'] ?? 0 );
+		if ( ! $post_id || get_post_type( $post_id ) !== AffiKeep_Post_Type::CPT ) {
+			wp_send_json_error( '商品IDが無効です' );
+		}
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			wp_send_json_error( '権限がありません' );
+		}
+
+		$status = self::check_product( $post_id );
+		wp_send_json_success( [
+			'status'       => $status,
+			'last_checked' => get_post_meta( $post_id, '_affikeep_last_checked', true ) ?: '',
+		] );
 	}
 
 	/** 有効化時にCronをスケジュール */
@@ -111,38 +131,34 @@ class AffiKeep_Link_Checker {
 
 	/**
 	 * 1商品の全モールURLをチェックし、ステータスを保存。
-	 * 総合ステータスはAmazon除外（常にunknownのため）で判定する。
+	 * 総合ステータスはbot検知系モール（Amazon等）を除外して判定する
+	 * （bot検知対象は常にunknownになりうるため、他モールの判定を打ち消してしまう）。
 	 * @return string ok|dead|unknown
 	 */
 	public static function check_product( int $post_id ): string {
-		$urls = [
-			'amazon'  => get_post_meta( $post_id, '_affikeep_amazon_url',  true ),
-			'rakuten' => get_post_meta( $post_id, '_affikeep_rakuten_url', true ),
-			'yahoo'   => get_post_meta( $post_id, '_affikeep_yahoo_url',   true ),
-		];
+		$reliable = []; // bot検知系を除いたモールのステータスのみ集計
 
-		$non_amazon = []; // 楽天・Yahoo のみ集計
-
-		foreach ( $urls as $mall => $url ) {
+		foreach ( AffiKeep_Malls::available() as $mall => $def ) {
+			$url = get_post_meta( $post_id, "_affikeep_{$mall}_url", true );
 			if ( empty( $url ) ) {
 				continue;
 			}
 			$status = self::check_url( $url, $mall );
 
-			// 楽天・Yahoo はモール別にも保存（Amazon はbot検知で常にunknownのため保存しない）
-			if ( $mall !== 'amazon' ) {
+			// bot検知系（Amazon等）はモール別ステータスを保存しない（常にunknownになりうるため）
+			if ( empty( $def['bot_phrases'] ) ) {
 				update_post_meta( $post_id, "_affikeep_{$mall}_status", $status );
-				$non_amazon[] = $status;
+				$reliable[] = $status;
 			}
 		}
 
-		// 総合判定：楽天・Yahoo のみで判定（Amazon除外）
+		// 総合判定：bot検知系を除いたモールのみで判定
 		// ok = 1つでも正常、dead = 全モール切れ、unknown = それ以外
-		if ( empty( $non_amazon ) ) {
-			$overall = 'unknown'; // 楽天・Yahoo のURLがない（Amazonのみ）
-		} elseif ( in_array( 'ok', $non_amazon, true ) ) {
+		if ( empty( $reliable ) ) {
+			$overall = 'unknown'; // 判定可能なURLがない（bot検知系のみ）
+		} elseif ( in_array( 'ok', $reliable, true ) ) {
 			$overall = 'ok'; // 1つでも正常なら正常
-		} elseif ( in_array( 'unknown', $non_amazon, true ) ) {
+		} elseif ( in_array( 'unknown', $reliable, true ) ) {
 			$overall = 'unknown'; // 不明が混じる場合は保留
 		} else {
 			$overall = 'dead'; // 全モール切れのときだけリンク切れ
@@ -206,17 +222,18 @@ class AffiKeep_Link_Checker {
 			return 'unknown';
 		}
 
-		// Amazonの特別処理（bot検知・販売終了の本文判定）
-		if ( $mall === 'amazon' ) {
-			$result = self::judge_amazon_body( $code, $body );
-			$reason = self::amazon_reason( $code, $body );
+		$def = AffiKeep_Malls::get( $mall ) ?? [];
+
+		// bot検知文言・要確認文言を持つモール（Amazon）はコード範囲に関わらず本文判定する
+		if ( ! empty( $def['bot_phrases'] ) || ! empty( $def['unknown_phrases'] ) ) {
+			[ $result, $reason ] = self::judge_by_phrases( $def, $code, $body );
 			self::log_check( $mall, $url, $code, $result, $reason );
 			return $result;
 		}
 
 		// 楽天・Yahoo：200系なら基本ok。本文に終了文言があればdead
 		if ( $code >= 200 && $code < 400 ) {
-			$matched = self::find_dead_phrase( $body );
+			$matched = self::find_dead_phrase( $body, $def['dead_phrases'] ?? [] );
 			$result  = $matched ? 'dead' : 'ok';
 			self::log_check( $mall, $url, $code, $result, $matched ? "終了文言「{$matched}」を検出" : '異常なし' );
 			return $result;
@@ -241,20 +258,23 @@ class AffiKeep_Link_Checker {
 
 		$updated = 0;
 		foreach ( $posts as $id ) {
-			$rakuten_url    = get_post_meta( $id, '_affikeep_rakuten_url',    true );
-			$yahoo_url      = get_post_meta( $id, '_affikeep_yahoo_url',      true );
-			$rakuten_status = get_post_meta( $id, '_affikeep_rakuten_status', true );
-			$yahoo_status   = get_post_meta( $id, '_affikeep_yahoo_status',   true );
+			$reliable = [];
+			foreach ( AffiKeep_Malls::available() as $mall => $def ) {
+				if ( ! empty( $def['bot_phrases'] ) ) {
+					continue; // bot検知系（Amazon等）はモール別ステータスを保存していないので対象外
+				}
+				$url    = get_post_meta( $id, "_affikeep_{$mall}_url", true );
+				$status = get_post_meta( $id, "_affikeep_{$mall}_status", true );
+				if ( $url && $status ) {
+					$reliable[] = $status;
+				}
+			}
 
-			$non_amazon = [];
-			if ( $rakuten_url && $rakuten_status ) $non_amazon[] = $rakuten_status;
-			if ( $yahoo_url   && $yahoo_status   ) $non_amazon[] = $yahoo_status;
-
-			if ( empty( $non_amazon ) ) {
+			if ( empty( $reliable ) ) {
 				$overall = 'unknown';
-			} elseif ( in_array( 'ok', $non_amazon, true ) ) {
+			} elseif ( in_array( 'ok', $reliable, true ) ) {
 				$overall = 'ok';
-			} elseif ( in_array( 'unknown', $non_amazon, true ) ) {
+			} elseif ( in_array( 'unknown', $reliable, true ) ) {
 				$overall = 'unknown';
 			} else {
 				$overall = 'dead';
@@ -289,70 +309,35 @@ class AffiKeep_Link_Checker {
 		] );
 	}
 
-	/** Amazon判定の理由文字列を生成（ログ用） */
-	private static function amazon_reason( int $code, string $body ): string {
-		$bot_phrases = [ 'ロボットによる', '自動化されたアクセス', 'Type the characters', 'api-services-support@amazon.com', 'To discuss automated access' ];
-		foreach ( $bot_phrases as $p ) {
+	/**
+	 * bot検知文言・要確認文言を持つモール（Amazon）向けの本文判定。
+	 * 優先順位: bot検知 → 要確認 → 販売終了 → HTTPステータスによるok/unknown。
+	 * @return array [ 判定結果, 理由文字列 ]
+	 */
+	private static function judge_by_phrases( array $def, int $code, string $body ): array {
+		foreach ( $def['bot_phrases'] ?? [] as $p ) {
 			if ( mb_stripos( $body, $p ) !== false ) {
-				return "bot検知ページ「{$p}」を検出（判定保留）";
+				return [ 'unknown', "bot検知ページ「{$p}」を検出（判定保留）" ];
 			}
 		}
-		$unknown_phrases = [ '現在お取り扱いできません', 'この商品は現在お取り扱いできません' ];
-		foreach ( $unknown_phrases as $p ) {
+		foreach ( $def['unknown_phrases'] ?? [] as $p ) {
 			if ( mb_stripos( $body, $p ) !== false ) {
-				return "要確認文言「{$p}」を検出（bot検知の可能性あり）";
+				return [ 'unknown', "要確認文言「{$p}」を検出（bot検知の可能性あり）" ];
 			}
 		}
-		$dead_phrases = [ 'ページが見つかりませんでした', 'Page Not Found' ];
-		foreach ( $dead_phrases as $p ) {
+		foreach ( $def['dead_phrases'] ?? [] as $p ) {
 			if ( mb_stripos( $body, $p ) !== false ) {
-				return "終了文言「{$p}」を検出";
+				return [ 'dead', "終了文言「{$p}」を検出" ];
 			}
 		}
-		return '異常なし';
-	}
-
-	/** Amazon本文の判定 */
-	private static function judge_amazon_body( int $code, string $body ): string {
-		// bot検知・CAPTCHAページ → unknown（誤検知を避け再試行待ち）
-		$bot_phrases = [
-			'ロボットによる', '自動化されたアクセス', 'Type the characters',
-			'api-services-support@amazon.com', 'To discuss automated access',
-		];
-		foreach ( $bot_phrases as $p ) {
-			if ( mb_stripos( $body, $p ) !== false ) {
-				return 'unknown';
-			}
-		}
-
-		// 「現在お取り扱いできません」はbot検知時にも出るためunknown扱い（再試行で判断）
-		$unknown_phrases = [ '現在お取り扱いできません', 'この商品は現在お取り扱いできません' ];
-		foreach ( $unknown_phrases as $p ) {
-			if ( mb_stripos( $body, $p ) !== false ) {
-				return 'unknown';
-			}
-		}
-
-		// 明確な404ページ文言 → dead
-		$dead_phrases = [ 'ページが見つかりませんでした', 'Page Not Found' ];
-		foreach ( $dead_phrases as $p ) {
-			if ( mb_stripos( $body, $p ) !== false ) {
-				return 'dead';
-			}
-		}
-
 		if ( $code >= 200 && $code < 400 ) {
-			return 'ok';
+			return [ 'ok', '異常なし' ];
 		}
-		return 'unknown';
+		return [ 'unknown', 'HTTPステータス ' . $code ];
 	}
 
-	/** 楽天・Yahoo共通の終了文言判定。マッチした文言を返す（なければ空文字） */
-	private static function find_dead_phrase( string $body ): string {
-		$phrases = [
-			'販売を終了', 'ページが見つかりません', '商品が見つかりません',
-			'お探しのページは見つかりませんでした', 'この商品は現在販売されておりません',
-		];
+	/** 終了文言リストと本文を照合。マッチした文言を返す（なければ空文字） */
+	private static function find_dead_phrase( string $body, array $phrases ): string {
 		foreach ( $phrases as $p ) {
 			if ( mb_stripos( $body, $p ) !== false ) {
 				return $p;

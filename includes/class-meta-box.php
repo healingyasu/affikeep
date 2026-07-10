@@ -25,6 +25,15 @@ class AffiKeep_Meta_Box {
 			'restUrl' => rest_url( 'affikeep/v1/search/rakuten' ),
 			'nonce'   => wp_create_nonce( 'wp_rest' ),
 		] );
+
+		// Amazon商品検索はPro限定。ライセンス無効時はスクリプト変数を渡さず、
+		// product-search.js側の `typeof affikeepAmazonSearch !== 'undefined'` チェックで自動的に無効化される。
+		if ( AffiKeep_License::is_active() ) {
+			wp_localize_script( 'affikeep-product-search', 'affikeepAmazonSearch', [
+				'restUrl' => rest_url( 'affikeep/v1/search/amazon' ),
+				'nonce'   => wp_create_nonce( 'wp_rest' ),
+			] );
+		}
 	}
 
 	public static function add(): void {
@@ -87,6 +96,22 @@ class AffiKeep_Meta_Box {
 			<div id="ak-search-results"></div>
 		</div>
 
+		<?php if ( AffiKeep_License::is_active() ) : ?>
+			<div class="ak-search-area">
+				<p>Amazonで商品を検索して自動入力（PA-API）</p>
+				<div class="ak-search-row">
+					<input type="text" id="ak-amazon-search-input" placeholder="例: ランニングシューズ メンズ">
+					<button type="button" id="ak-amazon-search-btn" class="button button-primary">Amazonで検索</button>
+				</div>
+				<div id="ak-amazon-search-results"></div>
+			</div>
+		<?php else : ?>
+			<p class="description" style="margin:0 0 16px;">
+				🔒 Pro版ではAmazon PA-APIを使った商品検索・自動入力ができます。
+				<a href="<?php echo esc_url( admin_url( 'admin.php?page=affikeep-settings' ) ); ?>">ライセンスを有効化する</a>
+			</p>
+		<?php endif; ?>
+
 		<style>
 		.affikeep-meta-table { width:100%; border-collapse:collapse; }
 		.affikeep-meta-table th { width:160px; padding:10px 12px 10px 0; font-weight:600; vertical-align:top; }
@@ -126,7 +151,14 @@ class AffiKeep_Meta_Box {
 				<td>
 					<input type="text" id="ak_amazon_price" name="_affikeep_amazon_price"
 						value="<?php echo $get( '_affikeep_amazon_price' ); ?>" placeholder="例: 2,980円">
-					<p class="desc">手動入力。両方入力するとブロックに2つの価格を表示します。</p>
+					<p class="desc">
+						<?php if ( AffiKeep_License::is_active() ) : ?>
+							Amazon検索（PA-API）で自動取得。手動入力も可。
+						<?php else : ?>
+							手動入力（Pro版ならAmazon検索で自動取得できます）。
+						<?php endif; ?>
+						両方入力するとブロックに2つの価格を表示します。
+					</p>
 				</td>
 			</tr>
 			<tr>
@@ -167,20 +199,98 @@ class AffiKeep_Meta_Box {
 					</div>
 				</td>
 			</tr>
+			<?php if ( AffiKeep_License::is_active() ) : ?>
+				<tr>
+					<th><label for="ak_rakuten_travel_url">楽天トラベル URL<br><span style="font-weight:400;font-size:11px;color:#787c82;">(Pro)</span></label></th>
+					<td>
+						<div class="ak-url-row">
+							<input type="url" id="ak_rakuten_travel_url" name="_affikeep_rakuten_travel_url"
+								value="<?php echo $get( '_affikeep_rakuten_travel_url' ); ?>" placeholder="https://travel.rakuten.co.jp/...">
+							<button type="button" class="button ak-open-url" data-target="ak_rakuten_travel_url">🔗 開く</button>
+						</div>
+						<p class="desc">楽天アフィリエイトの管理画面で発行した提携済みリンクをそのまま貼り付けてください（自動変換はしません）。</p>
+					</td>
+				</tr>
+				<tr>
+					<th><label for="ak_booking_url">Booking.com URL<br><span style="font-weight:400;font-size:11px;color:#787c82;">(Pro)</span></label></th>
+					<td>
+						<div class="ak-url-row">
+							<input type="url" id="ak_booking_url" name="_affikeep_booking_url"
+								value="<?php echo $get( '_affikeep_booking_url' ); ?>" placeholder="https://www.booking.com/hotel/...">
+							<button type="button" class="button ak-open-url" data-target="ak_booking_url">🔗 開く</button>
+						</div>
+						<p class="desc">通常の宿泊ページURLでOK。設定画面のアフィリエイトID（aid）が自動で付与されます。</p>
+					</td>
+				</tr>
+			<?php endif; ?>
 			<tr>
 				<th>リンク状態</th>
 				<td>
 					<?php
-					$status = get_post_meta( $post->ID, '_affikeep_link_status', true ) ?: 'unknown';
-					$labels = [ 'ok' => '正常', 'dead' => 'リンク切れ', 'unknown' => '未チェック' ];
-					echo '<span class="affikeep-status affikeep-status-' . esc_attr( $status ) . '">'
-						. esc_html( $labels[ $status ] ?? '不明' ) . '</span>';
-
-					$last = get_post_meta( $post->ID, '_affikeep_last_checked', true );
-					if ( $last ) {
-						echo ' <span style="color:#787c82;font-size:12px;">最終確認: ' . esc_html( $last ) . '</span>';
+					$raw_status = get_post_meta( $post->ID, '_affikeep_link_status', true );
+					$status     = $raw_status ?: 'unknown';
+					$labels     = [ 'ok' => '正常', 'dead' => 'リンク切れ', 'unknown' => '未チェック' ];
+					$last       = get_post_meta( $post->ID, '_affikeep_last_checked', true );
+					$has_url    = false;
+					foreach ( AffiKeep_Malls::ids() as $mall_id ) {
+						if ( $get( "_affikeep_{$mall_id}_url" ) ) {
+							$has_url = true;
+							break;
+						}
 					}
 					?>
+					<span id="ak-link-status-badge">
+						<span class="affikeep-status affikeep-status-<?php echo esc_attr( $status ); ?>">
+							<?php echo esc_html( $labels[ $status ] ?? '不明' ); ?>
+						</span>
+					</span>
+					<span id="ak-link-last-checked" style="color:#787c82;font-size:12px;">
+						<?php echo $last ? '最終確認: ' . esc_html( $last ) : ''; ?>
+					</span>
+					<button type="button" id="ak-check-now-btn" class="button button-small" style="margin-left:8px;">🔄 今すぐチェック</button>
+					<span id="ak-check-now-result" style="font-size:12px;color:#787c82;margin-left:6px;"></span>
+
+					<script>
+					(function($){
+						var postId        = <?php echo intval( $post->ID ); ?>;
+						var nonce         = '<?php echo esc_js( wp_create_nonce( 'affikeep_check_single' ) ); ?>';
+						var hasUrl        = <?php echo $has_url ? 'true' : 'false'; ?>;
+						var neverChecked  = <?php echo $raw_status ? 'false' : 'true'; ?>;
+						var labels        = { ok: '正常', dead: 'リンク切れ', unknown: '未チェック' };
+						var badge         = document.getElementById('ak-link-status-badge');
+						var lastEl        = document.getElementById('ak-link-last-checked');
+						var btn           = document.getElementById('ak-check-now-btn');
+						var result        = document.getElementById('ak-check-now-result');
+
+						function runCheck( silent ) {
+							if ( ! silent ) {
+								btn.disabled = true;
+								result.textContent = 'チェック中...';
+							}
+							$.post( ajaxurl, { action: 'affikeep_check_single', post_id: postId, nonce: nonce }, function (r) {
+								btn.disabled = false;
+								if ( r.success ) {
+									badge.innerHTML = '<span class="affikeep-status affikeep-status-' + r.data.status + '">'
+										+ ( labels[ r.data.status ] || '不明' ) + '</span>';
+									lastEl.textContent = r.data.last_checked ? '最終確認: ' + r.data.last_checked : '';
+									result.textContent = silent ? '' : '完了しました';
+								} else {
+									result.textContent = silent ? '' : ( 'エラー: ' + r.data );
+								}
+							} ).fail( function () {
+								btn.disabled = false;
+								if ( ! silent ) result.textContent = '通信エラーが発生しました';
+							} );
+						}
+
+						btn.addEventListener('click', function () { runCheck(false); });
+
+						// URLが登録済みで一度もチェックされていない商品は、編集画面を開いた時点で自動的に1回だけチェックする
+						if ( hasUrl && neverChecked ) {
+							runCheck(true);
+						}
+					})(jQuery);
+					</script>
 				</td>
 			</tr>
 		</table>
@@ -316,11 +426,10 @@ class AffiKeep_Meta_Box {
 			return;
 		}
 
-		$url_keys = [
-			'_affikeep_amazon_url',
-			'_affikeep_rakuten_url',
-			'_affikeep_yahoo_url',
-		];
+		$url_keys = array_map(
+			fn( $mall_id ) => "_affikeep_{$mall_id}_url",
+			AffiKeep_Malls::ids()
+		);
 		$text_fields = array_merge( [
 			'_affikeep_image_url',
 			'_affikeep_price',
@@ -359,8 +468,9 @@ class AffiKeep_Meta_Box {
 		if ( $url_changed ) {
 			delete_post_meta( $post_id, '_affikeep_link_status' );
 			delete_post_meta( $post_id, '_affikeep_last_checked' );
-			delete_post_meta( $post_id, '_affikeep_rakuten_status' );
-			delete_post_meta( $post_id, '_affikeep_yahoo_status' );
+			foreach ( AffiKeep_Malls::ids() as $mall_id ) {
+				delete_post_meta( $post_id, "_affikeep_{$mall_id}_status" );
+			}
 		}
 	}
 }
