@@ -45,9 +45,11 @@ class AffiKeep_Post_Type {
 
 			case 'ak_malls':
 				$malls = [];
-				if ( get_post_meta( $post_id, '_affikeep_amazon_url',  true ) ) $malls[] = 'Amazon';
-				if ( get_post_meta( $post_id, '_affikeep_rakuten_url', true ) ) $malls[] = '楽天';
-				if ( get_post_meta( $post_id, '_affikeep_yahoo_url',   true ) ) $malls[] = 'Yahoo';
+				foreach ( AffiKeep_Malls::available() as $mall_id => $def ) {
+					if ( get_post_meta( $post_id, "_affikeep_{$mall_id}_url", true ) ) {
+						$malls[] = $def['label'];
+					}
+				}
 				echo $malls ? esc_html( implode( ' / ', $malls ) ) : '<span style="color:#c3c4c7;">—</span>';
 				break;
 

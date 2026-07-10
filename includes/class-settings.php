@@ -52,14 +52,19 @@ class AffiKeep_Settings {
 			// もしもアフィリエイト（全モール共通のa_id）
 			'moshimo_aid'           => '',
 
+			// Booking.com（Pro限定・提携ID=aidをURLに付与）
+			'booking_affiliate_id'  => '',
+
 			// リンク切れチェック設定
 			'check_interval_hours'  => 24,  // チェック間隔（時間）
 			'notify_email'          => '',  // 通知先メール（空=管理者メール）
 
 			// 表示設定
-			'button_text_amazon'    => 'Amazonで見る',
-			'button_text_rakuten'   => '楽天で見る',
-			'button_text_yahoo'     => 'Yahoo!で見る',
+			'button_text_amazon'         => 'Amazonで見る',
+			'button_text_rakuten'        => '楽天で見る',
+			'button_text_yahoo'          => 'Yahoo!で見る',
+			'button_text_rakuten_travel' => '楽天トラベルで見る',
+			'button_text_booking'        => 'Booking.comで予約',
 		];
 	}
 
@@ -72,8 +77,10 @@ class AffiKeep_Settings {
 			'amazon_tracking_id', 'amazon_paapi_access_key', 'amazon_paapi_secret_key',
 			'yahoo_linkswitch', 'yahoo_affiliate_id',
 			'moshimo_aid',
+			'booking_affiliate_id',
 			'notify_email',
 			'button_text_amazon', 'button_text_rakuten', 'button_text_yahoo',
+			'button_text_rakuten_travel', 'button_text_booking',
 		];
 
 		foreach ( $text_fields as $field ) {

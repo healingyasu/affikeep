@@ -131,38 +131,34 @@ class AffiKeep_Link_Checker {
 
 	/**
 	 * 1商品の全モールURLをチェックし、ステータスを保存。
-	 * 総合ステータスはAmazon除外（常にunknownのため）で判定する。
+	 * 総合ステータスはbot検知系モール（Amazon等）を除外して判定する
+	 * （bot検知対象は常にunknownになりうるため、他モールの判定を打ち消してしまう）。
 	 * @return string ok|dead|unknown
 	 */
 	public static function check_product( int $post_id ): string {
-		$urls = [
-			'amazon'  => get_post_meta( $post_id, '_affikeep_amazon_url',  true ),
-			'rakuten' => get_post_meta( $post_id, '_affikeep_rakuten_url', true ),
-			'yahoo'   => get_post_meta( $post_id, '_affikeep_yahoo_url',   true ),
-		];
+		$reliable = []; // bot検知系を除いたモールのステータスのみ集計
 
-		$non_amazon = []; // 楽天・Yahoo のみ集計
-
-		foreach ( $urls as $mall => $url ) {
+		foreach ( AffiKeep_Malls::available() as $mall => $def ) {
+			$url = get_post_meta( $post_id, "_affikeep_{$mall}_url", true );
 			if ( empty( $url ) ) {
 				continue;
 			}
 			$status = self::check_url( $url, $mall );
 
-			// 楽天・Yahoo はモール別にも保存（Amazon はbot検知で常にunknownのため保存しない）
-			if ( $mall !== 'amazon' ) {
+			// bot検知系（Amazon等）はモール別ステータスを保存しない（常にunknownになりうるため）
+			if ( empty( $def['bot_phrases'] ) ) {
 				update_post_meta( $post_id, "_affikeep_{$mall}_status", $status );
-				$non_amazon[] = $status;
+				$reliable[] = $status;
 			}
 		}
 
-		// 総合判定：楽天・Yahoo のみで判定（Amazon除外）
+		// 総合判定：bot検知系を除いたモールのみで判定
 		// ok = 1つでも正常、dead = 全モール切れ、unknown = それ以外
-		if ( empty( $non_amazon ) ) {
-			$overall = 'unknown'; // 楽天・Yahoo のURLがない（Amazonのみ）
-		} elseif ( in_array( 'ok', $non_amazon, true ) ) {
+		if ( empty( $reliable ) ) {
+			$overall = 'unknown'; // 判定可能なURLがない（bot検知系のみ）
+		} elseif ( in_array( 'ok', $reliable, true ) ) {
 			$overall = 'ok'; // 1つでも正常なら正常
-		} elseif ( in_array( 'unknown', $non_amazon, true ) ) {
+		} elseif ( in_array( 'unknown', $reliable, true ) ) {
 			$overall = 'unknown'; // 不明が混じる場合は保留
 		} else {
 			$overall = 'dead'; // 全モール切れのときだけリンク切れ
@@ -262,20 +258,23 @@ class AffiKeep_Link_Checker {
 
 		$updated = 0;
 		foreach ( $posts as $id ) {
-			$rakuten_url    = get_post_meta( $id, '_affikeep_rakuten_url',    true );
-			$yahoo_url      = get_post_meta( $id, '_affikeep_yahoo_url',      true );
-			$rakuten_status = get_post_meta( $id, '_affikeep_rakuten_status', true );
-			$yahoo_status   = get_post_meta( $id, '_affikeep_yahoo_status',   true );
+			$reliable = [];
+			foreach ( AffiKeep_Malls::available() as $mall => $def ) {
+				if ( ! empty( $def['bot_phrases'] ) ) {
+					continue; // bot検知系（Amazon等）はモール別ステータスを保存していないので対象外
+				}
+				$url    = get_post_meta( $id, "_affikeep_{$mall}_url", true );
+				$status = get_post_meta( $id, "_affikeep_{$mall}_status", true );
+				if ( $url && $status ) {
+					$reliable[] = $status;
+				}
+			}
 
-			$non_amazon = [];
-			if ( $rakuten_url && $rakuten_status ) $non_amazon[] = $rakuten_status;
-			if ( $yahoo_url   && $yahoo_status   ) $non_amazon[] = $yahoo_status;
-
-			if ( empty( $non_amazon ) ) {
+			if ( empty( $reliable ) ) {
 				$overall = 'unknown';
-			} elseif ( in_array( 'ok', $non_amazon, true ) ) {
+			} elseif ( in_array( 'ok', $reliable, true ) ) {
 				$overall = 'ok';
-			} elseif ( in_array( 'unknown', $non_amazon, true ) ) {
+			} elseif ( in_array( 'unknown', $reliable, true ) ) {
 				$overall = 'unknown';
 			} else {
 				$overall = 'dead';

@@ -199,6 +199,30 @@ class AffiKeep_Meta_Box {
 					</div>
 				</td>
 			</tr>
+			<?php if ( AffiKeep_License::is_active() ) : ?>
+				<tr>
+					<th><label for="ak_rakuten_travel_url">楽天トラベル URL<br><span style="font-weight:400;font-size:11px;color:#787c82;">(Pro)</span></label></th>
+					<td>
+						<div class="ak-url-row">
+							<input type="url" id="ak_rakuten_travel_url" name="_affikeep_rakuten_travel_url"
+								value="<?php echo $get( '_affikeep_rakuten_travel_url' ); ?>" placeholder="https://travel.rakuten.co.jp/...">
+							<button type="button" class="button ak-open-url" data-target="ak_rakuten_travel_url">🔗 開く</button>
+						</div>
+						<p class="desc">楽天アフィリエイトの管理画面で発行した提携済みリンクをそのまま貼り付けてください（自動変換はしません）。</p>
+					</td>
+				</tr>
+				<tr>
+					<th><label for="ak_booking_url">Booking.com URL<br><span style="font-weight:400;font-size:11px;color:#787c82;">(Pro)</span></label></th>
+					<td>
+						<div class="ak-url-row">
+							<input type="url" id="ak_booking_url" name="_affikeep_booking_url"
+								value="<?php echo $get( '_affikeep_booking_url' ); ?>" placeholder="https://www.booking.com/hotel/...">
+							<button type="button" class="button ak-open-url" data-target="ak_booking_url">🔗 開く</button>
+						</div>
+						<p class="desc">通常の宿泊ページURLでOK。設定画面のアフィリエイトID（aid）が自動で付与されます。</p>
+					</td>
+				</tr>
+			<?php endif; ?>
 			<tr>
 				<th>リンク状態</th>
 				<td>
@@ -207,7 +231,13 @@ class AffiKeep_Meta_Box {
 					$status     = $raw_status ?: 'unknown';
 					$labels     = [ 'ok' => '正常', 'dead' => 'リンク切れ', 'unknown' => '未チェック' ];
 					$last       = get_post_meta( $post->ID, '_affikeep_last_checked', true );
-					$has_url    = $get( '_affikeep_amazon_url' ) || $get( '_affikeep_rakuten_url' ) || $get( '_affikeep_yahoo_url' );
+					$has_url    = false;
+					foreach ( AffiKeep_Malls::ids() as $mall_id ) {
+						if ( $get( "_affikeep_{$mall_id}_url" ) ) {
+							$has_url = true;
+							break;
+						}
+					}
 					?>
 					<span id="ak-link-status-badge">
 						<span class="affikeep-status affikeep-status-<?php echo esc_attr( $status ); ?>">
@@ -396,11 +426,10 @@ class AffiKeep_Meta_Box {
 			return;
 		}
 
-		$url_keys = [
-			'_affikeep_amazon_url',
-			'_affikeep_rakuten_url',
-			'_affikeep_yahoo_url',
-		];
+		$url_keys = array_map(
+			fn( $mall_id ) => "_affikeep_{$mall_id}_url",
+			AffiKeep_Malls::ids()
+		);
 		$text_fields = array_merge( [
 			'_affikeep_image_url',
 			'_affikeep_price',
@@ -439,8 +468,9 @@ class AffiKeep_Meta_Box {
 		if ( $url_changed ) {
 			delete_post_meta( $post_id, '_affikeep_link_status' );
 			delete_post_meta( $post_id, '_affikeep_last_checked' );
-			delete_post_meta( $post_id, '_affikeep_rakuten_status' );
-			delete_post_meta( $post_id, '_affikeep_yahoo_status' );
+			foreach ( AffiKeep_Malls::ids() as $mall_id ) {
+				delete_post_meta( $post_id, "_affikeep_{$mall_id}_status" );
+			}
 		}
 	}
 }

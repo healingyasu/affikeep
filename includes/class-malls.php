@@ -11,7 +11,7 @@ class AffiKeep_Malls {
 	 * モール定義。
 	 *   label            表示名
 	 *   is_pro           Pro限定モールかどうか（無料3モールはfalse）
-	 *   moshimo          もしもアフィリエイト変換用のp_id/pc_id/pl_id
+	 *   moshimo          もしもアフィリエイト変換用のp_id/pc_id/pl_id（省略可。未検証のモールには設定しないこと）
 	 *   direct_url       直接アフィリエイトURLを返すコールバック（対象外ならnullを返す）
 	 *   bot_phrases      bot検知ページの文言（判定保留扱い。Amazonのみ）
 	 *   unknown_phrases  要確認文言（bot検知の可能性あり。Amazonのみ）
@@ -60,6 +60,34 @@ class AffiKeep_Malls {
 				'dead_phrases' => [
 					'販売を終了', 'ページが見つかりません', '商品が見つかりません',
 					'お探しのページは見つかりませんでした', 'この商品は現在販売されておりません',
+				],
+			],
+
+			// 以下Pro限定モール。もしもアフィリエイトのp_id/pc_id/pl_idは実アカウントで
+			// 検証できていないため意図的に用意していない（誤った値だと成果が発生しないまま
+			// 気づけないリスクがあるため）。直接リンクのみ対応。
+			'rakuten_travel' => [
+				'label'  => '楽天トラベル',
+				'is_pro' => true,
+				'direct_url' => function ( string $url ) {
+					// 楽天アフィリエイトの管理画面で発行した提携済みリンクをそのまま貼る運用のため変換不要
+					return $url;
+				},
+				'dead_phrases' => [
+					'ページが見つかりません', 'お探しのページは見つかりませんでした',
+					'このプランの提供は終了しました', 'プランが見つかりません',
+				],
+			],
+
+			'booking' => [
+				'label'  => 'Booking.com',
+				'is_pro' => true,
+				'direct_url' => function ( string $url ) {
+					$aid = AffiKeep_Settings::get( 'booking_affiliate_id' );
+					return $aid ? add_query_arg( 'aid', $aid, $url ) : null;
+				},
+				'dead_phrases' => [
+					'ページが見つかりません', 'Page Not Found', 'no longer available',
 				],
 			],
 		];

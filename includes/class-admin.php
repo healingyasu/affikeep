@@ -364,30 +364,38 @@ class AffiKeep_Admin {
 						</button>
 					</div>
 
+					<?php
+					// bot検知系（Amazon等）を除いた、判定可能なモールのみ列として表示する
+					$table_malls = array_filter(
+						AffiKeep_Malls::available(),
+						fn( $def ) => empty( $def['bot_phrases'] )
+					);
+					?>
 					<table class="widefat striped">
 						<thead><tr>
 							<th style="width:32px;"><input type="checkbox" id="affikeep-select-all" title="全選択"></th>
 							<th>商品名</th>
-							<th style="width:80px;">楽天</th>
-							<th style="width:80px;">Yahoo</th>
+							<?php foreach ( $table_malls as $def ) : ?>
+								<th style="width:80px;"><?php echo esc_html( $def['label'] ); ?></th>
+							<?php endforeach; ?>
 							<th style="width:160px;">最終チェック</th>
 							<th style="width:60px;">編集</th>
 						</tr></thead>
 						<tbody>
 						<?php while ( $problem->have_posts() ) :
 							$problem->the_post();
-							$id             = get_the_ID();
-							$last           = get_post_meta( $id, '_affikeep_last_checked', true );
-							$rakuten_status = get_post_meta( $id, '_affikeep_rakuten_status', true ) ?: '';
-							$yahoo_status   = get_post_meta( $id, '_affikeep_yahoo_status',   true ) ?: '';
-							$rakuten_url    = get_post_meta( $id, '_affikeep_rakuten_url', true );
-							$yahoo_url      = get_post_meta( $id, '_affikeep_yahoo_url',   true );
+							$id   = get_the_ID();
+							$last = get_post_meta( $id, '_affikeep_last_checked', true );
 						?>
 							<tr>
 								<td><input type="checkbox" name="product_ids[]" value="<?php echo esc_attr( $id ); ?>"></td>
 								<td><?php echo esc_html( get_the_title() ); ?></td>
-								<td><?php echo self::mall_badge( $rakuten_status, ! empty( $rakuten_url ) ); ?></td>
-								<td><?php echo self::mall_badge( $yahoo_status,   ! empty( $yahoo_url ) ); ?></td>
+								<?php foreach ( $table_malls as $mall_id => $def ) :
+									$mall_status = get_post_meta( $id, "_affikeep_{$mall_id}_status", true ) ?: '';
+									$mall_url    = get_post_meta( $id, "_affikeep_{$mall_id}_url", true );
+								?>
+									<td><?php echo self::mall_badge( $mall_status, ! empty( $mall_url ) ); ?></td>
+								<?php endforeach; ?>
 								<td><?php echo esc_html( $last ?: '未チェック' ); ?></td>
 								<td><a href="<?php echo esc_url( get_edit_post_link( $id ) ); ?>">編集</a></td>
 							</tr>
@@ -720,6 +728,57 @@ class AffiKeep_Admin {
 						</td>
 					</tr>
 				</table>
+
+				<h2 class="affikeep-section-title">対応モール拡張（Pro機能）</h2>
+				<?php if ( AffiKeep_License::is_active() ) : ?>
+					<p class="description" style="margin-bottom:12px;">
+						楽天トラベルは商品編集画面のURL欄に、楽天アフィリエイトで発行した提携済みリンクをそのまま貼り付けてください（変換不要）。
+						Booking.comは通常の宿泊ページURLを貼るだけで、下のアフィリエイトIDが自動的に付与されます。
+					</p>
+					<table class="form-table">
+						<tr>
+							<th><label for="ak_booking_affiliate_id">Booking.com アフィリエイトID（aid）</label></th>
+							<td>
+								<input type="text" id="ak_booking_affiliate_id"
+									name="affikeep_settings[booking_affiliate_id]"
+									value="<?php echo esc_attr( $s['booking_affiliate_id'] ); ?>"
+									class="regular-text"
+									placeholder="例: 1234567">
+								<p class="description">
+									<a href="https://partner.booking.com/" target="_blank" rel="noopener">Booking.comパートナーセンター</a> で確認できます。
+								</p>
+							</td>
+						</tr>
+						<tr>
+							<th><label for="ak_btn_rakuten_travel">楽天トラベルボタン</label></th>
+							<td>
+								<input type="text" id="ak_btn_rakuten_travel"
+									name="affikeep_settings[button_text_rakuten_travel]"
+									value="<?php echo esc_attr( $s['button_text_rakuten_travel'] ); ?>"
+									class="regular-text">
+							</td>
+						</tr>
+						<tr>
+							<th><label for="ak_btn_booking">Booking.comボタン</label></th>
+							<td>
+								<input type="text" id="ak_btn_booking"
+									name="affikeep_settings[button_text_booking]"
+									value="<?php echo esc_attr( $s['button_text_booking'] ); ?>"
+									class="regular-text">
+							</td>
+						</tr>
+					</table>
+					<p class="description" style="margin-top:-8px;">
+						※もしもアフィリエイト経由には対応していません（実アカウントでの提携IDを検証できていないため、誤った値で成果が計測されないようこの2モールは直接リンクのみとしています）。
+					</p>
+				<?php else : ?>
+					<div class="notice notice-info inline" style="padding:12px 16px;margin:0;">
+						<p style="margin:0;">
+							🔒 Pro版では楽天トラベル・Booking.comにも対応できます（リンク切れチェック・ボタン表示）。
+							<a href="#ak-license-section">上部からライセンスを有効化</a> すると設定できるようになります。
+						</p>
+					</div>
+				<?php endif; ?>
 
 				<h2 class="affikeep-section-title">通知設定</h2>
 				<table class="form-table">

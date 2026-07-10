@@ -1,7 +1,7 @@
 # AffiKeep Pro 仕様書
 
-最終更新: 2026-07-09
-現状バージョン: v0.5.0（フェーズ0実装済み、Pro機能は未提供）
+最終更新: 2026-07-10
+現状バージョン: v0.8.0（フェーズ0〜4実装済み。当初計画したPro機能は全て提供済み）
 
 ## 1. 目的・全体方針
 
@@ -122,16 +122,18 @@ AffiKeepを「無料版はそのまま維持しつつ、ライセンスキーで
 - 実装: `admin_post_affikeep_export_csv` ハンドラで `admin-post.php` 経由のストリーム出力。`fputcsv` を使用し、Excelでの文字化けを避けるためUTF-8 BOMを付与。
 - 設置場所: 「リンク切れ」ページと「アクセス解析」ページにそれぞれエクスポートボタンを設置。
 
-### 3.4 対応モール拡張
+### 3.4 対応モール拡張（実装済み: 楽天トラベル・Booking.com）
 
-`AffiKeep_Malls` レジストリ（2.2節）を前提に、Pro限定モールを追加する。第一弾候補は楽天トラベル・Yahoo!オークション・Booking.comなど（優先順位と対象モールは実装着手時に改めて確定する）。
+`AffiKeep_Malls` レジストリ（2.2節）を前提に、Pro限定モールとして**楽天トラベル**・**Booking.com**を追加した。Yahoo!オークションは入札制で「売り切れ」の概念が既存モデルに合わないため見送り。
 
-各モール追加に必要な作業（レジストリ導入後は本質的にこれだけで済む想定）:
-- 設定画面の入力欄（アフィリエイトID・トラッキングID等）
+各モール追加に必要な作業（レジストリ導入により、実際にこれだけで済んだ）:
+- 設定画面の入力欄（アフィリエイトID等。楽天トラベルは不要）
 - リンク切れ判定用の「販売終了・売り切れ」文言リスト
 - アフィリエイトURL変換ロジック
 - 商品編集メタボックスへのURL入力欄
-- Gutenbergブロックへのボタン表示
+- Gutenbergブロックへのボタン表示（`templates/block-render.php`はレジストリ駆動化したため無改修で対応）
+
+**もしもアフィリエイト非対応の理由**: 楽天トラベル・Booking.comのもしも経由p_id/pc_id/pl_idは実アカウントで検証できておらず、誤った値のまま気づかずに使うと成果（収益）が発生しない事故になりうるため、意図的に実装しなかった。両モールとも直接リンクのみ対応（楽天トラベルは提携済みリンクをそのまま貼る運用、Booking.comは`aid=`パラメータを自動付与）。
 
 ## 4. 今回のロードマップで着手しないもの（明示的な見送り）
 
@@ -157,7 +159,10 @@ AffiKeepを「無料版はそのまま維持しつつ、ライセンスキーで
 | `includes/class-admin.php` | 設定画面にライセンスセクション・PA-API資格情報セクション追加、新規メニュー「アクセス解析」追加 |
 | `includes/class-amazon-paapi.php` | 新規: PA-API 5.0のAWS Signature V4署名・`SearchItems`/`GetItems`呼び出しをカプセル化 |
 | `includes/class-rest-api.php` | `/click` ルート追加、`/search/amazon` ルート追加（Pro限定） |
-| `includes/class-meta-box.php` | Amazonセクションに「🔍 Amazonで検索」ボタン追加（Pro限定） |
+| `includes/class-meta-box.php` | Amazonセクションに「🔍 Amazonで検索」ボタン追加（Pro限定）、楽天トラベル/Booking.comのURL欄追加、`save()`のURLキーをレジストリ駆動化 |
 | `assets/product-search.js` | Amazon検索（PA-API経由）に対応するよう拡張 |
-| `templates/block-render.php` | ボタンに `data-product-id` `data-post-id` `data-mall` 属性を追加 |
+| `includes/class-csv-export.php` | 新規: 商品一覧・クリック/収益レポートのCSVエクスポート（Pro限定） |
+| `includes/class-post-type.php` | 商品一覧の「対応モール」列をレジストリ駆動化 |
+| `templates/block-render.php` | ボタンに `data-product-id` `data-post-id` `data-mall` 属性を追加、ボタン出力全体をレジストリ駆動のループに一般化 |
+| `assets/block-frontend.css` | 楽天トラベル・Booking.comのボタン配色を追加 |
 | `assets/` | `click-tracker.js` を新規追加（Pro有効時のみ enqueue） |

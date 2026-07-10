@@ -27,8 +27,14 @@ class AffiKeep_CSV_Export {
 
 		self::stream_csv_header( 'affikeep-products-' . gmdate( 'Ymd' ) . '.csv' );
 
-		$out = fopen( 'php://output', 'w' );
-		self::write_csv_row( $out, [ '商品名', '価格', 'Amazon', '楽天', 'Yahoo!', 'リンク状態', '最終チェック日時', '累計クリック数' ] );
+		$out       = fopen( 'php://output', 'w' );
+		$mall_defs = AffiKeep_Malls::available();
+
+		self::write_csv_row( $out, array_merge(
+			[ '商品名', '価格' ],
+			array_column( $mall_defs, 'label' ),
+			[ 'リンク状態', '最終チェック日時', '累計クリック数' ]
+		) );
 
 		$status_labels = [ 'ok' => '正常', 'dead' => 'リンク切れ', 'unknown' => '未チェック' ];
 
@@ -36,16 +42,20 @@ class AffiKeep_CSV_Export {
 			$status = get_post_meta( $id, '_affikeep_link_status', true ) ?: 'unknown';
 			$price  = get_post_meta( $id, '_affikeep_price', true ) ?: get_post_meta( $id, '_affikeep_amazon_price', true );
 
-			self::write_csv_row( $out, [
-				get_the_title( $id ),
-				$price,
-				get_post_meta( $id, '_affikeep_amazon_url',  true ) ? '○' : '',
-				get_post_meta( $id, '_affikeep_rakuten_url', true ) ? '○' : '',
-				get_post_meta( $id, '_affikeep_yahoo_url',   true ) ? '○' : '',
-				$status_labels[ $status ] ?? $status,
-				get_post_meta( $id, '_affikeep_last_checked', true ) ?: '',
-				self::product_total_clicks( $id ),
-			] );
+			$mall_cells = [];
+			foreach ( $mall_defs as $mall_id => $def ) {
+				$mall_cells[] = get_post_meta( $id, "_affikeep_{$mall_id}_url", true ) ? '○' : '';
+			}
+
+			self::write_csv_row( $out, array_merge(
+				[ get_the_title( $id ), $price ],
+				$mall_cells,
+				[
+					$status_labels[ $status ] ?? $status,
+					get_post_meta( $id, '_affikeep_last_checked', true ) ?: '',
+					self::product_total_clicks( $id ),
+				]
+			) );
 		}
 
 		fclose( $out );
