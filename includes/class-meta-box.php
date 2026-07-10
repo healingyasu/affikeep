@@ -151,7 +151,14 @@ class AffiKeep_Meta_Box {
 				<td>
 					<input type="text" id="ak_amazon_price" name="_affikeep_amazon_price"
 						value="<?php echo $get( '_affikeep_amazon_price' ); ?>" placeholder="例: 2,980円">
-					<p class="desc">手動入力。両方入力するとブロックに2つの価格を表示します。</p>
+					<p class="desc">
+						<?php if ( AffiKeep_License::is_active() ) : ?>
+							Amazon検索（PA-API）で自動取得。手動入力も可。
+						<?php else : ?>
+							手動入力（Pro版ならAmazon検索で自動取得できます）。
+						<?php endif; ?>
+						両方入力するとブロックに2つの価格を表示します。
+					</p>
 				</td>
 			</tr>
 			<tr>
@@ -196,16 +203,64 @@ class AffiKeep_Meta_Box {
 				<th>リンク状態</th>
 				<td>
 					<?php
-					$status = get_post_meta( $post->ID, '_affikeep_link_status', true ) ?: 'unknown';
-					$labels = [ 'ok' => '正常', 'dead' => 'リンク切れ', 'unknown' => '未チェック' ];
-					echo '<span class="affikeep-status affikeep-status-' . esc_attr( $status ) . '">'
-						. esc_html( $labels[ $status ] ?? '不明' ) . '</span>';
-
-					$last = get_post_meta( $post->ID, '_affikeep_last_checked', true );
-					if ( $last ) {
-						echo ' <span style="color:#787c82;font-size:12px;">最終確認: ' . esc_html( $last ) . '</span>';
-					}
+					$raw_status = get_post_meta( $post->ID, '_affikeep_link_status', true );
+					$status     = $raw_status ?: 'unknown';
+					$labels     = [ 'ok' => '正常', 'dead' => 'リンク切れ', 'unknown' => '未チェック' ];
+					$last       = get_post_meta( $post->ID, '_affikeep_last_checked', true );
+					$has_url    = $get( '_affikeep_amazon_url' ) || $get( '_affikeep_rakuten_url' ) || $get( '_affikeep_yahoo_url' );
 					?>
+					<span id="ak-link-status-badge">
+						<span class="affikeep-status affikeep-status-<?php echo esc_attr( $status ); ?>">
+							<?php echo esc_html( $labels[ $status ] ?? '不明' ); ?>
+						</span>
+					</span>
+					<span id="ak-link-last-checked" style="color:#787c82;font-size:12px;">
+						<?php echo $last ? '最終確認: ' . esc_html( $last ) : ''; ?>
+					</span>
+					<button type="button" id="ak-check-now-btn" class="button button-small" style="margin-left:8px;">🔄 今すぐチェック</button>
+					<span id="ak-check-now-result" style="font-size:12px;color:#787c82;margin-left:6px;"></span>
+
+					<script>
+					(function($){
+						var postId        = <?php echo intval( $post->ID ); ?>;
+						var nonce         = '<?php echo esc_js( wp_create_nonce( 'affikeep_check_single' ) ); ?>';
+						var hasUrl        = <?php echo $has_url ? 'true' : 'false'; ?>;
+						var neverChecked  = <?php echo $raw_status ? 'false' : 'true'; ?>;
+						var labels        = { ok: '正常', dead: 'リンク切れ', unknown: '未チェック' };
+						var badge         = document.getElementById('ak-link-status-badge');
+						var lastEl        = document.getElementById('ak-link-last-checked');
+						var btn           = document.getElementById('ak-check-now-btn');
+						var result        = document.getElementById('ak-check-now-result');
+
+						function runCheck( silent ) {
+							if ( ! silent ) {
+								btn.disabled = true;
+								result.textContent = 'チェック中...';
+							}
+							$.post( ajaxurl, { action: 'affikeep_check_single', post_id: postId, nonce: nonce }, function (r) {
+								btn.disabled = false;
+								if ( r.success ) {
+									badge.innerHTML = '<span class="affikeep-status affikeep-status-' + r.data.status + '">'
+										+ ( labels[ r.data.status ] || '不明' ) + '</span>';
+									lastEl.textContent = r.data.last_checked ? '最終確認: ' + r.data.last_checked : '';
+									result.textContent = silent ? '' : '完了しました';
+								} else {
+									result.textContent = silent ? '' : ( 'エラー: ' + r.data );
+								}
+							} ).fail( function () {
+								btn.disabled = false;
+								if ( ! silent ) result.textContent = '通信エラーが発生しました';
+							} );
+						}
+
+						btn.addEventListener('click', function () { runCheck(false); });
+
+						// URLが登録済みで一度もチェックされていない商品は、編集画面を開いた時点で自動的に1回だけチェックする
+						if ( hasUrl && neverChecked ) {
+							runCheck(true);
+						}
+					})(jQuery);
+					</script>
 				</td>
 			</tr>
 		</table>

@@ -12,6 +12,26 @@ class AffiKeep_Link_Checker {
 		add_action( 'admin_post_affikeep_check_now',     [ __CLASS__, 'handle_check_now' ] );
 		add_action( 'wp_ajax_affikeep_auto_check',       [ __CLASS__, 'ajax_auto_check' ] );
 		add_action( 'wp_ajax_affikeep_recalc_statuses',  [ __CLASS__, 'ajax_recalculate' ] );
+		add_action( 'wp_ajax_affikeep_check_single',     [ __CLASS__, 'ajax_check_single' ] );
+	}
+
+	/** 商品編集画面用: 1商品だけを即時チェックする（未チェック商品の自動チェック・手動再チェックボタン用） */
+	public static function ajax_check_single(): void {
+		check_ajax_referer( 'affikeep_check_single', 'nonce' );
+
+		$post_id = intval( $_POST['post_id'] ?? 0 );
+		if ( ! $post_id || get_post_type( $post_id ) !== AffiKeep_Post_Type::CPT ) {
+			wp_send_json_error( '商品IDが無効です' );
+		}
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			wp_send_json_error( '権限がありません' );
+		}
+
+		$status = self::check_product( $post_id );
+		wp_send_json_success( [
+			'status'       => $status,
+			'last_checked' => get_post_meta( $post_id, '_affikeep_last_checked', true ) ?: '',
+		] );
 	}
 
 	/** 有効化時にCronをスケジュール */
