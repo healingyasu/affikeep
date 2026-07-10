@@ -273,6 +273,17 @@ class AffiKeep_Admin {
 					ステータス再計算（URLを叩かず即時更新）
 				</button>
 				<span id="affikeep-recalc-result" style="margin-left:8px;font-size:12px;color:#787c82;"></span>
+
+				<?php if ( AffiKeep_License::is_active() ) : ?>
+					<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=affikeep_export_products_csv' ), 'affikeep_export_products_csv' ) ); ?>"
+						class="button" style="margin-left:8px;">
+						📄 商品一覧をCSVでエクスポート
+					</a>
+				<?php else : ?>
+					<span style="margin-left:8px;font-size:12px;color:#787c82;">
+						🔒 <a href="<?php echo esc_url( admin_url( 'admin.php?page=affikeep-settings#ak-license-section' ) ); ?>">Pro版</a>ならCSVエクスポートができます
+					</span>
+				<?php endif; ?>
 			</div>
 
 			<?php

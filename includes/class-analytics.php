@@ -365,11 +365,17 @@ class AffiKeep_Analytics {
 				</div>
 			<?php endif; ?>
 
-			<div style="margin-bottom:16px;display:flex;gap:4px;flex-wrap:wrap;">
+			<div style="margin-bottom:16px;display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
 				<?php foreach ( [ 7 => '7日間', 30 => '30日間', 90 => '90日間' ] as $d => $label ) : ?>
 					<a href="<?php echo esc_url( add_query_arg( 'days', $d, $base_url ) ); ?>"
 						class="button <?php echo $days === $d ? 'button-primary' : ''; ?>"><?php echo esc_html( $label ); ?></a>
 				<?php endforeach; ?>
+				<a href="<?php echo esc_url( wp_nonce_url(
+					add_query_arg( [ 'action' => 'affikeep_export_clicks_csv', 'days' => $days ], admin_url( 'admin-post.php' ) ),
+					'affikeep_export_clicks_csv'
+				) ); ?>" class="button" style="margin-left:8px;">
+					📄 この期間をCSVでエクスポート
+				</a>
 			</div>
 
 			<div class="affikeep-cards">
