@@ -25,6 +25,15 @@ class AffiKeep_Meta_Box {
 			'restUrl' => rest_url( 'affikeep/v1/search/rakuten' ),
 			'nonce'   => wp_create_nonce( 'wp_rest' ),
 		] );
+
+		// Amazon商品検索はPro限定。ライセンス無効時はスクリプト変数を渡さず、
+		// product-search.js側の `typeof affikeepAmazonSearch !== 'undefined'` チェックで自動的に無効化される。
+		if ( AffiKeep_License::is_active() ) {
+			wp_localize_script( 'affikeep-product-search', 'affikeepAmazonSearch', [
+				'restUrl' => rest_url( 'affikeep/v1/search/amazon' ),
+				'nonce'   => wp_create_nonce( 'wp_rest' ),
+			] );
+		}
 	}
 
 	public static function add(): void {
@@ -86,6 +95,22 @@ class AffiKeep_Meta_Box {
 			</div>
 			<div id="ak-search-results"></div>
 		</div>
+
+		<?php if ( AffiKeep_License::is_active() ) : ?>
+			<div class="ak-search-area">
+				<p>Amazonで商品を検索して自動入力（PA-API）</p>
+				<div class="ak-search-row">
+					<input type="text" id="ak-amazon-search-input" placeholder="例: ランニングシューズ メンズ">
+					<button type="button" id="ak-amazon-search-btn" class="button button-primary">Amazonで検索</button>
+				</div>
+				<div id="ak-amazon-search-results"></div>
+			</div>
+		<?php else : ?>
+			<p class="description" style="margin:0 0 16px;">
+				🔒 Pro版ではAmazon PA-APIを使った商品検索・自動入力ができます。
+				<a href="<?php echo esc_url( admin_url( 'admin.php?page=affikeep-settings' ) ); ?>">ライセンスを有効化する</a>
+			</p>
+		<?php endif; ?>
 
 		<style>
 		.affikeep-meta-table { width:100%; border-collapse:collapse; }

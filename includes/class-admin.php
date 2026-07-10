@@ -617,6 +617,45 @@ class AffiKeep_Admin {
 					</tr>
 				</table>
 
+				<h2 class="affikeep-section-title">Amazon PA-API連携（Pro機能・商品検索用）</h2>
+				<?php if ( AffiKeep_License::is_active() ) : ?>
+					<p class="description" style="margin-bottom:12px;">
+						商品編集画面でAmazon商品をキーワード検索できるようになります。
+						<a href="https://affiliate.amazon.co.jp/assoc_credentials/home" target="_blank" rel="noopener">Amazonアソシエイトの認証情報管理</a> で発行できます。
+						パートナータグは上のトラッキングIDと共通です。
+					</p>
+					<table class="form-table">
+						<tr>
+							<th><label for="ak_amazon_paapi_access_key">アクセスキーID</label></th>
+							<td>
+								<input type="text" id="ak_amazon_paapi_access_key"
+									name="affikeep_settings[amazon_paapi_access_key]"
+									value="<?php echo esc_attr( $s['amazon_paapi_access_key'] ); ?>"
+									class="regular-text">
+							</td>
+						</tr>
+						<tr>
+							<th><label for="ak_amazon_paapi_secret_key">シークレットキー</label></th>
+							<td>
+								<input type="text" id="ak_amazon_paapi_secret_key"
+									name="affikeep_settings[amazon_paapi_secret_key]"
+									value="<?php echo esc_attr( $s['amazon_paapi_secret_key'] ); ?>"
+									class="regular-text">
+								<p class="description">
+									PA-APIの利用には直近のAmazonアソシエイト経由の売上実績が必要です。資格情報が無い場合はこの機能は使えません（商品の手入力は引き続き可能です）。
+								</p>
+							</td>
+						</tr>
+					</table>
+				<?php else : ?>
+					<div class="notice notice-info inline" style="padding:12px 16px;margin:0;">
+						<p style="margin:0;">
+							🔒 Pro版ではAmazon PA-APIを使った商品検索・自動入力ができます（商品名・画像・価格・URLを自動取得）。
+							<a href="#ak-license-section">上部からライセンスを有効化</a> すると設定できるようになります。
+						</p>
+					</div>
+				<?php endif; ?>
+
 				<h2 class="affikeep-section-title">Yahoo!ショッピング（バリューコマース）</h2>
 				<p class="description" style="margin-bottom:12px;">
 					LinkSwitch か アフィリエイトID のどちらかを入力してください。両方入力した場合は LinkSwitch が優先されます。<br>
@@ -737,7 +776,7 @@ class AffiKeep_Admin {
 			<?php endif; ?>
 		<?php endif; ?>
 
-		<h2 class="affikeep-section-title">Proライセンス</h2>
+		<h2 class="affikeep-section-title" id="ak-license-section">Proライセンス</h2>
 		<div class="notice notice-info inline" style="padding:14px 18px;margin:0 0 20px;">
 			<?php if ( $active ) : ?>
 				<p style="margin:0 0 10px;">

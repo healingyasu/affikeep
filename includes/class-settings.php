@@ -39,7 +39,11 @@ class AffiKeep_Settings {
 			'rakuten_affiliate_id'  => '',
 
 			// Amazon アソシエイツ
-			'amazon_tracking_id'    => '',  // トラッキングID（例: yoursite-22）
+			'amazon_tracking_id'      => '',  // トラッキングID（例: yoursite-22）
+
+			// Amazon PA-API（Pro限定・商品検索用）
+			'amazon_paapi_access_key' => '',
+			'amazon_paapi_secret_key' => '',
 
 			// Yahoo!ショッピング（バリューコマース）
 			'yahoo_linkswitch'      => '',  // LinkSwitch（アフィリエイトIDより優先）
@@ -65,7 +69,7 @@ class AffiKeep_Settings {
 
 		$text_fields = [
 			'rakuten_app_id', 'rakuten_access_key', 'rakuten_app_url', 'rakuten_affiliate_id',
-			'amazon_tracking_id',
+			'amazon_tracking_id', 'amazon_paapi_access_key', 'amazon_paapi_secret_key',
 			'yahoo_linkswitch', 'yahoo_affiliate_id',
 			'moshimo_aid',
 			'notify_email',

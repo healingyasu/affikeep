@@ -3,7 +3,7 @@
 最終更新: 2026-07-09
 関連仕様: [`PRO_SPEC.md`](./PRO_SPEC.md)
 
-現状 v0.6.0（フェーズ0・フェーズ1実装済み） → 以下のフェーズ順で実装する。各フェーズは独立してリリース可能な単位とし、フェーズ0（基盤整備）以外は無料版ユーザーに影響を与えない追加実装とする。
+現状 v0.6.1（フェーズ0・フェーズ1・フェーズ2実装済み） → 以下のフェーズ順で実装する。各フェーズは独立してリリース可能な単位とし、フェーズ0（基盤整備）以外は無料版ユーザーに影響を与えない追加実装とする。
 
 ## フェーズ0: 基盤整備（v0.5.0）
 
@@ -43,17 +43,22 @@
 - Free版では「アクセス解析」メニューがアップグレード案内のみを表示し、`/click`ルートは404、`click-tracker.js`もenqueueされないことを確認（Pro機能が確実に隠れている）。
 - グラフの配色はdataviz skillの categorical palette（固定順: blue/aqua/yellow）を使用し、`validate_palette.js`でCVD安全性を確認済み（一部モールは背景とのコントラストがWARN域のため、凡例に必ず直接ラベルを表示する形で緩和）。
 
-## フェーズ2: Amazon PA-API連携（v0.6.x）
+## フェーズ2: Amazon PA-API連携（v0.6.1）
 
 Pro版は「既にAmazonアソシエイツで実績がありPA-APIを利用できる人」をターゲットに割り切る（[`PRO_SPEC.md`](./PRO_SPEC.md) 1章）。資格情報を持たないユーザー向けの救済導線は作らない。
 
-- [ ] `AffiKeep_Amazon_PAAPI` クラス実装（`includes/class-amazon-paapi.php`）— AWS Signature V4署名、`SearchItems`/`GetItems`呼び出し
-- [ ] 設定画面にPA-API資格情報セクション追加（アクセスキーID・シークレットキー。パートナータグは既存の`amazon_tracking_id`を流用）
-- [ ] REST `/affikeep/v1/search/amazon` ルート追加（Pro限定、`edit_posts`権限必須）
-- [ ] `assets/product-search.js` をAmazon対応に拡張、`class-meta-box.php` に検索ボタン追加
-- [ ] 検索結果からURL・価格・ASIN・画像URLを自動入力
+- [x] `AffiKeep_Amazon_PAAPI` クラス実装（`includes/class-amazon-paapi.php`）— AWS Signature V4署名、`SearchItems`呼び出し
+- [x] 設定画面にPA-API資格情報セクション追加（アクセスキーID・シークレットキー。パートナータグは既存の`amazon_tracking_id`を流用。Pro限定・Free版はアップグレード案内のみ）
+- [x] REST `/affikeep/v1/search/amazon` ルート追加（Pro限定、`edit_posts`権限必須）
+- [x] `assets/product-search.js` を複数モール対応に汎用化、`class-meta-box.php` にAmazon検索ボックス追加（Pro限定）
+- [x] 検索結果からURL・価格・ASIN・画像URLを自動入力
 
 **完了条件**: 実際にPA-API資格情報（サンドボックスまたは実運用の実績がある実アカウント）で検索→自動入力が動作すること。資格情報未設定・無効時にエラーメッセージが適切に表示され、既存の手入力機能に影響がないこと。
+
+**実装メモ**:
+- `GetItems`（ASIN指定取得）は今回UI側で使う場所がなかったため見送り、`SearchItems`のみ実装（未使用コードを作らない方針のため）。必要になれば`request()`を再利用して追加できる構造にしてある。
+- AWS Signature V4の署名ロジックは、決定性・鍵長・Authorizationヘッダー形式・レスポンス解析ロジック(`parse_items`)を単体テストで検証済み。ただし**実際のAmazon PA-APIサーバーに対する疎通確認はサンドボックス環境の外部通信制限によりできていない**（このセッションの実行環境ではwebservices.amazon.co.jp等ほとんどの外部ホストへの通信がネットワークポリシーでブロックされるため）。実運用前に実際のPA-API資格情報で動作確認することを推奨する。
+- 実環境（WP 6.7.2）でPro/Free切り替えによるUIの出し分け（設定画面のPA-API欄、商品編集画面の検索ボックス、RESTルートの404化）は実際に確認済み。
 
 ## フェーズ3: CSV/レポートエクスポート（v0.6.x）
 

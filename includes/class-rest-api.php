@@ -19,6 +19,30 @@ class AffiKeep_Rest_API {
 				],
 			],
 		] );
+
+		// Amazon商品検索はPro限定（ライセンス無効時はルート自体を登録しない）
+		if ( AffiKeep_License::is_active() ) {
+			register_rest_route( 'affikeep/v1', '/search/amazon', [
+				'methods'             => 'GET',
+				'callback'            => [ __CLASS__, 'search_amazon' ],
+				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
+				'args'                => [
+					'q' => [
+						'required'          => true,
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+				],
+			] );
+		}
+	}
+
+	public static function search_amazon( WP_REST_Request $request ): WP_REST_Response {
+		$result = AffiKeep_Amazon_PAAPI::search_items( $request->get_param( 'q' ) );
+
+		if ( isset( $result['error'] ) ) {
+			return new WP_REST_Response( [ 'error' => $result['error'] ], 400 );
+		}
+		return new WP_REST_Response( [ 'items' => $result['items'] ], 200 );
 	}
 
 	public static function search_rakuten( WP_REST_Request $request ): WP_REST_Response {
