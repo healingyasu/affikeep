@@ -12,8 +12,15 @@ class AffiKeep_License {
 	const GRACE_DAYS = 7; // 期限切れ後も機能を止めずに警告表示のみで猶予する日数
 
 	// フェーズ0: オフライン署名検証用の秘密鍵。
-	// これは「抑止」であり暗号的な「防御」ではない（配布前に固有の値へ変更すること）。
-	const SECRET = 'affikeep-pro-offline-secret-change-before-release';
+	// これは「抑止」であり暗号的な「防御」ではない。
+	//
+	// 本物の署名鍵はこのファイルに書かない（リポジトリは公開のため、書くと誰でも読めて偽キーを作れる）。
+	// secret() が次の優先順位で解決する:
+	//   1. 定数 AFFIKEEP_LICENSE_SECRET（自サイトで検証する場合は wp-config.php に define する）
+	//   2. 環境変数 AFFIKEEP_LICENSE_SECRET（キー発行スクリプトが Blog-secrets/.env から読み込む）
+	//   3. 下記プレースホルダ（配布ビルド時に本物の鍵へ差し替える。docs/PRO_LICENSE_ISSUING.md 5節）
+	// プレースホルダのままだと本物のキーは検証を通らない＝Proは有効化されない（安全側に倒れる）。
+	const SECRET_PLACEHOLDER = 'affikeep-pro-secret-placeholder-not-for-release';
 
 	public static function init(): void {
 		add_action( 'admin_post_affikeep_activate_license',   [ __CLASS__, 'handle_activate' ] );
@@ -86,7 +93,22 @@ class AffiKeep_License {
 	 * 発行手順は docs/PRO_LICENSE_ISSUING.md を参照。
 	 */
 	public static function sign( string $plan, string $expiry ): string {
-		return substr( hash_hmac( 'sha256', $plan . '-' . $expiry, self::SECRET ), 0, 16 );
+		return substr( hash_hmac( 'sha256', $plan . '-' . $expiry, self::secret() ), 0, 16 );
+	}
+
+	/**
+	 * 署名鍵を解決する。本物の鍵はコードに含めず、定数または環境変数から読み込む。
+	 * どちらも無い場合はプレースホルダを返す（本物のキーは検証を通らない＝安全側）。
+	 */
+	private static function secret(): string {
+		if ( defined( 'AFFIKEEP_LICENSE_SECRET' ) && AFFIKEEP_LICENSE_SECRET ) {
+			return (string) AFFIKEEP_LICENSE_SECRET;
+		}
+		$env = getenv( 'AFFIKEEP_LICENSE_SECRET' );
+		if ( is_string( $env ) && $env !== '' ) {
+			return $env;
+		}
+		return self::SECRET_PLACEHOLDER;
 	}
 
 	public static function handle_activate(): void {

@@ -39,4 +39,37 @@ php bin/generate-license-key.php pro 20271231
 
 ## 5. 秘密鍵の管理
 
-`includes/class-license.php` の `AffiKeep_License::SECRET` が署名鍵。これはリポジトリに含まれる値のため、**配布用ビルド（wordpress.orgやZIP配布）の前に固有の値へ変更すること**。秘密鍵が漏れるとキーが偽造可能になる点に注意（フェーズ0はあくまで「抑止」であり暗号的な「防御」ではない）。
+署名鍵は**リポジトリに書かない**（`healingyasu/affikeep` は公開リポジトリのため、コードに本物の鍵を書くと誰でも読めて偽キーを作れてしまう）。
+
+本物の鍵は `~/Documents/Blog-secrets/.env`（iCloud非同期・非公開）に `AFFIKEEP_LICENSE_SECRET=...` として保存済み。`includes/class-license.php` の `AffiKeep_License::secret()` が次の優先順位で鍵を解決する。
+
+1. 定数 `AFFIKEEP_LICENSE_SECRET`（wp-config.php で `define` した場合）
+2. 環境変数 `AFFIKEEP_LICENSE_SECRET`
+3. コード内のプレースホルダ `SECRET_PLACEHOLDER`（本物ではない。これのままだと本物のキーは検証を通らない＝Proは有効化されない安全側の挙動）
+
+### キー発行時
+
+`bin/generate-license-key.php` は上記 `.env` から自動で鍵を読み込むため、**発行コマンドはこれまで通り**（2節参照）。鍵が見つからない場合はエラーを出して発行を中止する（プレースホルダで誤って発行しないため）。
+
+別マシンや別パスで発行する場合は、環境変数で渡せる。
+
+```bash
+# 鍵を直接渡す
+AFFIKEEP_LICENSE_SECRET=xxxx php bin/generate-license-key.php pro 20271231
+# .env のパスを指定する
+AFFIKEEP_SECRET_FILE=/path/to/.env php bin/generate-license-key.php pro 20271231
+```
+
+### 自サイトで動作確認する場合
+
+自分のWordPressで有効化テストをするときは、そのサイトの `wp-config.php` に本物の鍵を書く。
+
+```php
+define( 'AFFIKEEP_LICENSE_SECRET', 'ここに Blog-secrets/.env の値' );
+```
+
+### 配布ビルド時（将来）
+
+wordpress.org / ZIP配布用のビルドでは、`secret()` が本物の鍵を返せるよう、ビルド時に `SECRET_PLACEHOLDER` を本物の値へ差し替える（または配布ZIPに含める設定に本物の鍵を埋め込む）。この差し替え工程は決済自動化フェーズで整備する。それまでは配布用ビルドを作らないこと。
+
+秘密鍵が漏れるとキーが偽造可能になる点に注意（フェーズ0はあくまで「抑止」であり暗号的な「防御」ではない）。
